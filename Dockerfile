@@ -2,7 +2,7 @@
 
 FROM centos:centos7.9.2009
 
-ARG PIP_VERSION
+ARG PIP_VERSION=23.1
 
 # Install dependency packages
 RUN yum -y update && \
@@ -81,7 +81,15 @@ RUN python3.8 -m pip install pip==${PIP_VERSION} && \
   pip install --no-cache -r requirements/ingest-slack.txt && \
   pip install --no-cache -r requirements/ingest-wikipedia.txt && \
   pip install --no-cache -r requirements/local-inference.txt && \
-  pip install --no-cache "detectron2@git+https://github.com/facebookresearch/detectron2.git@e2ce8dc#egg=detectron2"
+  pip install --no-cache "detectron2@git+https://github.com/facebookresearch/detectron2.git@e2ce8dc#egg=detectron2" && \
+  pip install --no-cache Flask==2.2.3 && \
+  pip install --no-cache langchain==0.0.136 && \
+  pip install --no-cache pdfminer.six && \
+  pip install --no-cache pinecone-client && \
+  pip install --no-cache requests && \
+  pip install --no-cache openai && \
+  pip install --no-cache tiktoken && \
+  pip install --no-cache azure-storage-blob azure-identity
 
 COPY example-docs example-docs
 COPY unstructured unstructured
@@ -90,4 +98,10 @@ RUN python3.8 -c "import nltk; nltk.download('punkt')" && \
   python3.8 -c "import nltk; nltk.download('averaged_perceptron_tagger')" && \
   python3.8 -c "from unstructured.ingest.doc_processor.generalized import initialize; initialize()"
 
-CMD ["/bin/bash"]
+COPY create_index.py create_index.py
+
+# Make port 80 available to the world outside this container
+EXPOSE 8080
+
+CMD ["python3.8", "create_index.py"]
+# CMD ["/bin/bash"]
