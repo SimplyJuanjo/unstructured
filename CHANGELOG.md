@@ -1,4 +1,46 @@
-## 0.5.13-dev8
+## 0.6.2-dev0
+
+### Enhancements
+
+* Added logic to `partition_pdf` for detecting copy protected PDFs and falling back
+  to the hi res strategy when necessary.
+
+### Features
+
+### Fixes
+
+## 0.6.1
+
+### Enhancements
+
+* Updated the table extraction parameter name to be more descriptive
+
+### Features
+
+### Fixes
+
+## 0.6.0
+
+### Enhancements
+
+* Adds an `ssl_verify` kwarg to `partition` and `partition_html` to enable turning off
+  SSL verification for HTTP requests. SSL verification is on by default.
+* Allows users to pass in ocr language to `partition_pdf` and `partition_image` through
+  the `ocr_language` kwarg. `ocr_language` corresponds to the code for the language pack
+  in Tesseract. You will need to install the relevant Tesseract language pack to use a
+  given language.
+
+### Features
+
+* Table extraction is now possible for pdfs from `partition` and `partition_pdf`.
+* Adds support for extracting attachments from `.msg` files
+
+### Fixes
+
+* Adds an `ssl_verify` kwarg to `partition` and `partition_html` to enable turning off
+  SSL verification for HTTP requests. SSL verification is on by default.
+
+## 0.5.13
 
 ### Enhancements
 
@@ -15,6 +57,7 @@
 * Update to `_read_xml` so that Markdown files with embedded HTML process correctly.
 * Fallback to "fast" strategy only emits a warning if the user specifies the "hi_res" strategy.
 * unstructured-partition-text_type exceeds_cap_ratio fix returns and how capitalization ratios are calculated
+* `partition_pdf` and `partition_text` group broken paragraphs to avoid fragmented `NarrativeText` elements.
 * .json files resolved as "application/json" on centos7 (or other installs with older libmagic libs)
 
 ## 0.5.12
