@@ -102,6 +102,7 @@ COPY create_index.py create_index.py
 
 # Make port 80 available to the world outside this container
 EXPOSE 8080
+EXPOSE 443
 
 CMD ["python3.8", "create_index.py"]
 # CMD ["/bin/bash"]
