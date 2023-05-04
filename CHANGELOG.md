@@ -1,4 +1,20 @@
-## 0.6.2-dev0
+## 0.6.3-dev1
+
+### Enhancements
+
+
+### Features
+
+* Added `partition_multiple_via_api` for partitioning multiple documents in a single REST
+  API call.
+
+### Fixes
+
+* Updates the grouping logic in the `partition_pdf` fast strategy to group together text
+  in the same bounding box.
+
+
+## 0.6.2
 
 ### Enhancements
 
@@ -7,7 +23,12 @@
 
 ### Features
 
+* Add `partition_via_api` for partitioning documents through the hosted API.
+
 ### Fixes
+
+* Fix how `exceeds_cap_ratio` handles empty (returns `True` instead of `False`)
+* Updates `detect_filetype` to properly detect JSONs when the MIME type is `text/plain`.
 
 ## 0.6.1
 
