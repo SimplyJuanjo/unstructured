@@ -23,6 +23,9 @@ import pinecone
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 
+from azure.messaging.webpubsubservice import WebPubSubServiceClient
+from azure.core.credentials import AzureKeyCredential
+
 app = Flask(__name__)
 
 pinecone.init(
@@ -47,6 +50,23 @@ def process_data():
     index_name = request.args.get('index')
     doc_id = request.args.get('doc_id')
     url = request.args.get('url')
+
+    endpoint = "https://raito.webpubsub.azure.com"
+    key = "OVFdvxYDiWSBbQv03eVvq7P/yu5u5/pl7TYJ0pFs3ac="
+     # Configura el cliente de Web PubSub
+    hub_name = "Hub"
+     # Inicializar el cliente de Web PubSub
+    service_client = WebPubSubServiceClient(endpoint=endpoint, credential=AzureKeyCredential(key), hub=hub_name)
+
+    # Enviar notificación de estado
+    user_id = request.args.get('userId')
+    filename = request.args.get('filename')
+    message = {"docId": doc_id, "status": "procesando", "filename": filename}
+    service_client.send_to_group(
+        user_id,
+        json.dumps(message),
+        content_type="application/json"
+    )
 
     print(f'index: {index_name}, doc_id: {doc_id}, url: {url}')
 
@@ -107,13 +127,24 @@ def process_data():
     block_blob_client = container_client.get_blob_client(result_name)
     upload_blob_response = block_blob_client.upload_blob(data=data_2[0].page_content)
     print(upload_blob_response)
+    message = {"docId": doc_id, "status": "extracted done", "filename": filename}
+    service_client.send_to_group(
+        user_id,
+        json.dumps(message),
+        content_type="application/json"
+    )
 
     fast_result_name = f"{parts[4]}/{parts[5]}/{parts[6]}/{parts[7]}/{parts[8]}/fast_extracted.txt"
     print(fast_result_name)
     fast_block_blob_client = container_client.get_blob_client(fast_result_name)
     fast_upload_blob_response = fast_block_blob_client.upload_blob(data=data[0].page_content)
     print(fast_upload_blob_response)
-
+    message = {"docId": doc_id, "status": "fast_extracted done", "filename": filename}
+    service_client.send_to_group(
+        user_id,
+        json.dumps(message),
+        content_type="application/json"
+    )
     # for d in data:
     #     d.metadata["doc_id"] = doc_id
 

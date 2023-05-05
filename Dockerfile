@@ -89,7 +89,8 @@ RUN python3.8 -m pip install pip==${PIP_VERSION} && \
   pip install --no-cache requests && \
   pip install --no-cache openai && \
   pip install --no-cache tiktoken && \
-  pip install --no-cache azure-storage-blob azure-identity
+  pip install --no-cache azure-storage-blob azure-identity && \
+  pip install --no-cache azure-messaging-webpubsubservice
 
 COPY example-docs example-docs
 COPY unstructured unstructured
