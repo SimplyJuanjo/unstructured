@@ -75,6 +75,12 @@ def process_data():
         print("Creating index")
         pinecone.create_index(index_name, dimension=1536, metric="cosine", pods=1, pod_type="p1.x1")
 
+    message = {"docId": doc_id, "status": "index created", "filename": filename}
+    service_client.send_to_group(
+        user_id,
+        json.dumps(message),
+        content_type="application/json"
+    )
     # Download the PDF from the URL and save it to a temporary file
     response = requests.get(url)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
