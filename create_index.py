@@ -74,8 +74,7 @@ def process_data():
     if not index_name in active_indexes:
         print("Creating index")
         pinecone.create_index(index_name, dimension=1536, metric="cosine", pods=1, pod_type="p1.x1")
-
-    message = {"docId": doc_id, "status": "index created", "filename": filename}
+    message["status"] = "index created"
     service_client.send_to_group(
         user_id,
         json.dumps(message),
@@ -133,7 +132,7 @@ def process_data():
     block_blob_client = container_client.get_blob_client(result_name)
     upload_blob_response = block_blob_client.upload_blob(data=data_2[0].page_content)
     print(upload_blob_response)
-    message = {"docId": doc_id, "status": "extracted done", "filename": filename}
+    message["status"] = "extracted done"
     service_client.send_to_group(
         user_id,
         json.dumps(message),
@@ -145,7 +144,7 @@ def process_data():
     fast_block_blob_client = container_client.get_blob_client(fast_result_name)
     fast_upload_blob_response = fast_block_blob_client.upload_blob(data=data[0].page_content)
     print(fast_upload_blob_response)
-    message = {"docId": doc_id, "status": "fast_extracted done", "filename": filename}
+    message["status"] = "fast_extracted done"
     service_client.send_to_group(
         user_id,
         json.dumps(message),
