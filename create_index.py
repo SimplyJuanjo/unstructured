@@ -70,23 +70,13 @@ def process_data():
 
     print(f'index: {index_name}, doc_id: {doc_id}, url: {url}')
 
-    active_indexes = pinecone.list_indexes()
-    if not index_name in active_indexes:
-        print("Creating index")
-        pinecone.create_index(index_name, dimension=1536, metric="cosine", pods=1, pod_type="p1.x1")
-    message["status"] = "index created"
-    service_client.send_to_group(
-        user_id,
-        json.dumps(message),
-        content_type="application/json"
-    )
     # Download the PDF from the URL and save it to a temporary file
     response = requests.get(url)
     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
         temp_file.write(response.content)
         temp_file_path = temp_file.name
 
-    # Load the PDF file
+    # Load the PDF file in low resolution
     loader_1 = PDFMinerLoader(temp_file_path)
     data = loader_1.load()
     data[0].metadata["doc_id"] = doc_id
@@ -94,6 +84,26 @@ def process_data():
     data_time_1 = time.time()
     print(f"Data 1 loaded in {data_time_1 - start_time} seconds")
     print(data)
+
+    # Send the data to Azure Blob Storage
+    container_name = url.split("/")[3]
+    container_client = blob_service_client.get_container_client(container_name)
+    # Split the URL by '/'
+    parts = url.split('/')
+
+    # Concatenate the relevant parts
+    fast_result_name = f"{parts[4]}/{parts[5]}/{parts[6]}/{parts[7]}/{parts[8]}/fast_extracted.txt"
+    print(fast_result_name)
+    fast_block_blob_client = container_client.get_blob_client(fast_result_name)
+    fast_upload_blob_response = fast_block_blob_client.upload_blob(data=data[0].page_content)
+    print(fast_upload_blob_response)
+
+    message["status"] = "fast_extracted done"
+    service_client.send_to_group(
+        user_id,
+        json.dumps(message),
+        content_type="application/json"
+    )
 
     # Process the PDF data
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
@@ -108,8 +118,21 @@ def process_data():
             "doc_id": text.metadata["doc_id"],
         })
 
-    vStore = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, metadatas=metadatas)
+    active_indexes = pinecone.list_indexes()
+    if not index_name in active_indexes:
+        print("Creating index")
+        pinecone.create_index(index_name, dimension=1536, metric="cosine", pods=1, pod_type="p1.x1")
 
+    Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, metadatas=metadatas)
+
+    message["status"] = "index created, let chat"
+    service_client.send_to_group(
+        user_id,
+        json.dumps(message),
+        content_type="application/json"
+    )
+
+    # Extract the text from the PDF in high resolution
     unstructured_kwargs = {
         "strategy": "hi_res",
         "ocr_languages": "eng+spa",
@@ -121,52 +144,19 @@ def process_data():
     print(f"Data 2 loaded in {data_time - start_time} seconds")
     print(data_2)
 
-    # Send the data to Azure Blob Storage
-    container_name = url.split("/")[3]
-    container_client = blob_service_client.get_container_client(container_name)
-    # Split the URL by '/'
-    parts = url.split('/')
-    # Concatenate the relevant parts
+
     result_name = f"{parts[4]}/{parts[5]}/{parts[6]}/{parts[7]}/{parts[8]}/extracted.txt"
     print(result_name)
     block_blob_client = container_client.get_blob_client(result_name)
     upload_blob_response = block_blob_client.upload_blob(data=data_2[0].page_content)
     print(upload_blob_response)
-    message["status"] = "extracted done"
+
+    message["status"] = "hi_res extracted done"
     service_client.send_to_group(
         user_id,
         json.dumps(message),
         content_type="application/json"
     )
-
-    fast_result_name = f"{parts[4]}/{parts[5]}/{parts[6]}/{parts[7]}/{parts[8]}/fast_extracted.txt"
-    print(fast_result_name)
-    fast_block_blob_client = container_client.get_blob_client(fast_result_name)
-    fast_upload_blob_response = fast_block_blob_client.upload_blob(data=data[0].page_content)
-    print(fast_upload_blob_response)
-    message["status"] = "fast_extracted done"
-    service_client.send_to_group(
-        user_id,
-        json.dumps(message),
-        content_type="application/json"
-    )
-    # for d in data:
-    #     d.metadata["doc_id"] = doc_id
-
-    # # Process the PDF data option 1
-    # text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-    # texts = text_splitter.split_documents(data)
-    # openai_api_key = os.getenv("OPENAI_API_KEY")
-    # embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
-
-    # metadatas = []
-    # for text in texts:
-    #     metadatas.append({
-    #         "source": text.metadata["source"],
-    #         "doc_id": text.metadata["doc_id"],
-    #     })
-
-    # vStore = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, metadatas=metadatas)
 
     os.remove(temp_file_path)
 
