@@ -19,6 +19,6 @@ spec:
         pathType: Prefix
         backend:
           service:
-            name: fileuploader
+            name: fileuploader-service
             port:
-              name: http
+              number: 80
