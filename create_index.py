@@ -202,19 +202,32 @@ def process_data():
             "doc_id": text.metadata["doc_id"],
         })
 
-    active_indexes = pinecone.list_indexes()
-    if not index_name in active_indexes:
-        print("Creating index")
-        pinecone.create_index(index_name, dimension=1536, metric="cosine", pods=1, pod_type="p1.x1")
+    try:
+        active_indexes = pinecone.list_indexes()
+        if not index_name in active_indexes:
+            print("Creating index")
+            pinecone.create_index(index_name, dimension=1536, metric="cosine", pods=1, pod_type="p1.x1")
 
-    Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, metadatas=metadatas)
-
-    message["status"] = "index created, let chat"
-    service_client.send_to_group(
-        user_id,
-        json.dumps(message),
-        content_type="application/json"
-    )
+        vectorstore = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, metadatas=metadatas)
+        print("Index created", vectorstore)
+        
+    except Exception as e:
+        message["status"] = "index creation failed"
+        service_client.send_to_group(
+            user_id,
+            json.dumps(message),
+            content_type="application/json"
+        )
+        print(e)
+        raise e
+        
+    else:
+        message["status"] = "index created, let chat"
+        service_client.send_to_group(
+            user_id,
+            json.dumps(message),
+            content_type="application/json"
+        )
 
     # TODO: match text lang from ms_detect_request to unstructured available languages
     # Extract the text from the PDF in high resolution
