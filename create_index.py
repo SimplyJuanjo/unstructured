@@ -22,9 +22,9 @@ import os
 import pinecone
 from azure.identity import DefaultAzureCredential
 from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
-
 from azure.messaging.webpubsubservice import WebPubSubServiceClient
 from azure.core.credentials import AzureKeyCredential
+import uuid
 
 app = Flask(__name__)
 
@@ -42,7 +42,10 @@ BLOB = {
 }
 connection_string = f'DefaultEndpointsProtocol=https;AccountName={BLOB["NAMEBLOB"]};AccountKey={BLOB["KEY"]};EndpointSuffix=core.windows.net'
 # connection_string = f"https://{account_name}core.windows.net/"
-blob_service_client = BlobServiceClient.from_connection_string(connection_string)   
+blob_service_client = BlobServiceClient.from_connection_string(connection_string)
+
+subscription_key = '302b412fdec54f8595b3075c4e610754' # os.environ[key_var_name]
+region = 'northeurope' # os.environ[region_var_name]
 
 @app.route('/triggerCreateBook', methods=['POST'])
 def process_data():
@@ -85,13 +88,72 @@ def process_data():
     print(f"Data 1 loaded in {data_time_1 - start_time} seconds")
     print(data)
 
+    translate_time = time.time()
+    # To detect the language use only the first 500 characters
+    detect_body = [{
+    'text': data[0].page_content[:500],
+    }]  
+    # If you encounter any issues with the base_url or path, make sure
+    # that you are using the latest endpoint: https://docs.microsoft.com/azure/cognitive-services/translator/reference/v3-0-languages
+    base_url = 'https://api.cognitive.microsofttranslator.com/'
+    path = '/detect?api-version=3.0'
+    constructed_url = base_url + path
+
+    headers = {
+    'Ocp-Apim-Subscription-Key': subscription_key,
+    'Ocp-Apim-Subscription-Region': region,
+    'Content-type': 'application/json',
+    'X-ClientTraceId': str(uuid.uuid4())
+    }
+
+    ms_detect_request = requests.post(constructed_url, headers=headers, json=detect_body)
+    response = ms_detect_request.json()
+
+    print(json.dumps(response, sort_keys=True, indent=4, ensure_ascii=False, separators=(',', ': ')))
+    language = response[0]['language']
+    print(response[0]['language'])
+
+    path_2 = '/translate?api-version=3.0'
+    params = '&from=' + language + '&to=en'
+    constructed_url_2 = base_url + path_2 + params
+
+    print(len(data[0].page_content))
+    # The maximum number of characters that can be translated per request is 50000, so we need to split the text
+    # into chunks of 50000 characters
+    chunks = [data[0].page_content[i:i+50000] for i in range(0, len(data[0].page_content), 50000)]
+    print(len(chunks))
+
+    # body = [{
+    # 'text': data[0].page_content,
+    # }]  
+
+    # trans_request = requests.post(constructed_url_2, headers=headers, json=body)
+    # response = trans_request.json()
+
+    completed_translation = ""
+    for i, chunk in enumerate(chunks):
+        body = [{
+        'text': chunk,
+        }]
+        trans_response = requests.post(constructed_url_2, headers=headers, json=body)
+        translated_text = trans_response.json()[0]['translations'][0]['text']
+        completed_translation += translated_text
+        print(f"Chunk {i} translated")
+        print(len(completed_translation))
+
+    end_translate_time = time.time()
+    print(f"Translation done in {end_translate_time - translate_time} seconds")
+
+    # print(json.dumps(trans_response, sort_keys=True, indent=4, ensure_ascii=False, separators=(',', ': ')))
+    # print(response[0]['translations'][0]['text'])
+
     # Send the data to Azure Blob Storage
     container_name = url.split("/")[3]
     container_client = blob_service_client.get_container_client(container_name)
     # Split the URL by '/'
     parts = url.split('/')
 
-    # Concatenate the relevant parts
+    # Upload the original PDF text
     fast_result_name = f"{parts[4]}/{parts[5]}/{parts[6]}/{parts[7]}/{parts[8]}/fast_extracted.txt"
     print(fast_result_name)
     fast_block_blob_client = container_client.get_blob_client(fast_result_name)
@@ -105,8 +167,30 @@ def process_data():
         content_type="application/json"
     )
 
+    # Upload the translated PDF text
+    trans_result_name = f"{parts[4]}/{parts[5]}/{parts[6]}/{parts[7]}/{parts[8]}/fast_extracted_translated.txt"
+    print(trans_result_name)
+    trans_block_blob_client = container_client.get_blob_client(trans_result_name)
+    trans_upload_blob_response = trans_block_blob_client.upload_blob(data=completed_translation)
+    print(trans_upload_blob_response)
+
+    message["status"] = "fast_extracted_translated done"
+    service_client.send_to_group(
+        user_id,
+        json.dumps(message),
+        content_type="application/json"
+    )
+
+    # Upload the PDF language as a text file
+    lang_result_name = f"{parts[4]}/{parts[5]}/{parts[6]}/{parts[7]}/{parts[8]}/language.txt"
+    print(lang_result_name)
+    lang_block_blob_client = container_client.get_blob_client(lang_result_name)
+    lang_upload_blob_response = lang_block_blob_client.upload_blob(data=language)
+    print(lang_upload_blob_response)
+
     # Process the PDF data
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+    data[0].page_content = completed_translation
     texts = text_splitter.split_documents(data)
     openai_api_key = os.getenv("OPENAI_API_KEY")
     embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
@@ -132,6 +216,7 @@ def process_data():
         content_type="application/json"
     )
 
+    # TODO: match text lang from ms_detect_request to unstructured available languages
     # Extract the text from the PDF in high resolution
     unstructured_kwargs = {
         "strategy": "hi_res",
@@ -143,7 +228,6 @@ def process_data():
     data_time = time.time()
     print(f"Data 2 loaded in {data_time - start_time} seconds")
     print(data_2)
-
 
     result_name = f"{parts[4]}/{parts[5]}/{parts[6]}/{parts[7]}/{parts[8]}/extracted.txt"
     print(result_name)
