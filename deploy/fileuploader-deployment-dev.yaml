@@ -1,0 +1,22 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fileuploader-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fileuploader
+  template:
+    metadata:
+      labels:
+        app: fileuploader
+    spec:
+      containers:
+        - name: fileuploader-container
+          image: fileuploader.azurecr.io/fileuploader:latest
+          env:
+          - name: ENVIRONMENT
+            value: DEV
+          ports:
+            - containerPort: 8080

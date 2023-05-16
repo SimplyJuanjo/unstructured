@@ -10,6 +10,7 @@ az aks get-credentials --resource-group raitogpt2 --name fileLoader2
 #kubectl apply -f ./fileuploader-ingress.yaml
 
 kubectl apply -f fileuploader-deployment.yaml
+#kubectl apply -f fileuploader-deployment-dev.yaml
 #kubectl apply -f fileuploader-service.yaml
 
 # Show cluster
