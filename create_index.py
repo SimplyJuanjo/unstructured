@@ -25,35 +25,26 @@ from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 from azure.messaging.webpubsubservice import WebPubSubServiceClient
 from azure.core.credentials import AzureKeyCredential
 import uuid
-from azure.keyvault.secrets import SecretClient
-
-credential = DefaultAzureCredential()
-environment = os.getenv('ENVIRONMENT')
 
 app = Flask(__name__)
 
-# Usando diferentes Key Vaults para cada entorno
-if environment == 'PROD':
-    vault_url = "https://raitosecretsprod.vault.azure.net"
-else:  # dev
-    vault_url = "https://raitosecretsdev.vault.azure.net"
 
-secret_client = SecretClient(vault_url=vault_url, credential=credential)
-
-pinecone_api_key = secret_client.get_secret('PINECONEAPIKEY')
-pinecone_env = secret_client.get_secret('PINECONEENVIRONMENT')
-openai_api_key = secret_client.get_secret('OPENAIAPIKEY')
-blob_key = secret_client.get_secret('BLOBKEY')
-blob_name = secret_client.get_secret('BLOBNAME')
+openai_api_key = os.getenv('OPENAI_API_KEY')
+pinecone_api_key = os.getenv('PINECONE_API_KEY')
+pinecone_environment = os.getenv('PINECONE_ENVIRONMENT')
+blobname = os.getenv('BLOBNAME')
+blobkey = os.getenv('BLOBKEY')
 
 pinecone.init(
     api_key=pinecone_api_key,
-    environment=pinecone_env,
+    environment=pinecone_environment,
 )
 
+# Initialize the OpenAIEmbeddings object with your credentials
+
 BLOB = {
-    "KEY" : blob_key,
-    "NAMEBLOB": blob_name,
+    "KEY" : blobkey,
+    "NAMEBLOB": blobname,
 }
 connection_string = f'DefaultEndpointsProtocol=https;AccountName={BLOB["NAMEBLOB"]};AccountKey={BLOB["KEY"]};EndpointSuffix=core.windows.net'
 # connection_string = f"https://{account_name}core.windows.net/"
