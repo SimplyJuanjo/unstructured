@@ -8,7 +8,7 @@ az aks get-credentials --resource-group raitogpt2 --name fileLoader2
 #kubectl apply -f ./cert.yaml
 #kubectl apply -f ./issuer.yaml
 #kubectl apply -f ./fileuploader-ingress.yaml
-#kubectl apply -f secrets.yaml
+#kubectl apply -f ./secrets.yaml
 kubectl apply -f fileuploader-deployment.yaml
 #kubectl apply -f fileuploader-deployment-dev.yaml
 #kubectl apply -f fileuploader-service.yaml

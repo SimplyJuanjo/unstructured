@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: fileuploader-service
+  namespace: default
+spec:
+  type: ClusterIP
+  selector:
+    app: fileuploader
+  ports:
+    - name: http
+      protocol: TCP
+      port: 80
+      targetPort: 8080
+

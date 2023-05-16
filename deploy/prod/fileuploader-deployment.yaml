@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: fileuploader-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: fileuploader
+  template:
+    metadata:
+      labels:
+        app: fileuploader
+    spec:
+      containers:
+        - name: fileuploader-container
+          image: fileuploader.azurecr.io/fileuploader:latest
+          env:
+          - name: OPENAI_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: OPENAI_API_KEY
+          - name: PINECONE_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: PINECONE_API_KEY
+          - name: PINECONE_ENVIRONMENT
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: PINECONE_ENVIRONMENT
+          - name: BLOBNAME
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: BLOBNAME
+          - name: BLOBKEY
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: BLOBKEY
+          ports:
+            - containerPort: 8080
