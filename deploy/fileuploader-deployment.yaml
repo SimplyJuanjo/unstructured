@@ -15,5 +15,8 @@ spec:
       containers:
         - name: fileuploader-container
           image: fileuploader.azurecr.io/fileuploader:latest
+          env:
+          - name: ENVIRONMENT
+            value: PROD
           ports:
             - containerPort: 8080

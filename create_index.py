@@ -25,20 +25,35 @@ from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 from azure.messaging.webpubsubservice import WebPubSubServiceClient
 from azure.core.credentials import AzureKeyCredential
 import uuid
+from azure.keyvault.secrets import SecretClient
+
+credential = DefaultAzureCredential()
+environment = os.getenv('ENVIRONMENT')
 
 app = Flask(__name__)
 
+# Usando diferentes Key Vaults para cada entorno
+if environment == 'PROD':
+    vault_url = "https://raitosecretsprod.vault.azure.net"
+else:  # dev
+    vault_url = "https://raitosecretsdev.vault.azure.net"
+
+secret_client = SecretClient(vault_url=vault_url, credential=credential)
+
+pinecone_api_key = secret_client.get_secret('PINECONEAPIKEY')
+pinecone_env = secret_client.get_secret('PINECONEENVIRONMENT')
+openai_api_key = secret_client.get_secret('OPENAIAPIKEY')
+blob_key = secret_client.get_secret('BLOBKEY')
+blob_name = secret_client.get_secret('BLOBNAME')
+
 pinecone.init(
-    api_key="301911fa-2795-4620-9998-aa24ddab5f8e",
-    environment="eu-west1-gcp",
+    api_key=pinecone_api_key,
+    environment=pinecone_env,
 )
 
-# Initialize the OpenAIEmbeddings object with your credentials
-os.environ["OPENAI_API_KEY"] = "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"
-
 BLOB = {
-    "KEY" : 'EoANszi/Uvi4PpbH3VExh9HxGvVJX9JNEcQkW5vk+QveguTA/3VcNQfS3Z1ZzAL720wuYUc8xF6R+AStO48GOA==',
-    "NAMEBLOB": 'blobraitogpt2',
+    "KEY" : blob_key,
+    "NAMEBLOB": blob_name,
 }
 connection_string = f'DefaultEndpointsProtocol=https;AccountName={BLOB["NAMEBLOB"]};AccountKey={BLOB["KEY"]};EndpointSuffix=core.windows.net'
 # connection_string = f"https://{account_name}core.windows.net/"
@@ -193,7 +208,6 @@ def process_data():
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
         data[0].page_content = completed_translation
         texts = text_splitter.split_documents(data)
-        openai_api_key = os.getenv("OPENAI_API_KEY")
         embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
 
         metadatas = []
