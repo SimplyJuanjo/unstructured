@@ -14,7 +14,7 @@ spec:
     spec:
       containers:
         - name: fileuploader-container
-          image: fileuploader.azurecr.io/fileuploader:latest
+          image: fileuploader.azurecr.io/fileloader:latest
           env:
           - name: OPENAI_API_KEY
             valueFrom:
