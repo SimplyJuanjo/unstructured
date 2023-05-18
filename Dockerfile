@@ -83,7 +83,7 @@ RUN python3.8 -m pip install pip==${PIP_VERSION} && \
   pip install --no-cache -r requirements/local-inference.txt && \
   pip install --no-cache "detectron2@git+https://github.com/facebookresearch/detectron2.git@e2ce8dc#egg=detectron2" && \
   pip install --no-cache Flask==2.2.3 && \
-  pip install --no-cache langchain==0.0.136 && \
+  pip install --no-cache langchain==0.0.173 && \
   pip install --no-cache pdfminer.six && \
   pip install --no-cache pinecone-client && \
   pip install --no-cache requests && \

@@ -201,7 +201,7 @@ docker-build:
 
 .PHONY: docker-start-bash
 docker-start-bash:
-	docker run -it -p 8080:8080 --rm ${DOCKER_IMAGE}
+	docker run --env-file .env -it -p 8080:8080 --rm ${DOCKER_IMAGE}
 
 .PHONY: docker-test
 docker-test:
