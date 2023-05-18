@@ -284,7 +284,7 @@ def process_data():
             content_type="application/json"
         )
         response = {
-            "msg": "error",
+            "msg": "error processing the file",
             "error": str(e),
             "status": 500,
         }
