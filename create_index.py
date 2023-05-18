@@ -283,13 +283,13 @@ def process_data():
             json.dumps(message2),
             content_type="application/json"
         )
-        response = {
-            "msg": "error",
-            "error": str(e),
-            "status": 500,
-        }
-        json_response = json.dumps(response)
-        return json_response
+        # response = {
+        #     "msg": "error",
+        #     "error": str(e),
+        #     "status": 500,
+        # }
+        # json_response = json.dumps(response)
+        raise e
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', port=8080)
