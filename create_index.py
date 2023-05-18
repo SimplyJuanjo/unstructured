@@ -276,7 +276,7 @@ def process_data():
         return json_response
     except Exception as e:
         print(e)
-        message2 = {"docId": doc_id, "status": "error", "filename": filename}
+        message2 = {"docId": doc_id, "status": "error processing the file", "filename": filename}
         message2["error"] = str(e)
         service_client.send_to_group(
             user_id,
@@ -284,7 +284,7 @@ def process_data():
             content_type="application/json"
         )
         response = {
-            "msg": "error processing the file",
+            "msg": "error",
             "error": str(e),
             "status": 500,
         }
