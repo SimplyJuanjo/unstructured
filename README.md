@@ -75,6 +75,7 @@ installation. NOTE: We do not currently support python 3.11, please use an older
     - `libreoffice` (MS Office docs)
 - If you are parsing PDFs, run the following to install the `detectron2` model, which
   `unstructured` uses for layout detection:
+    - `pip install tensorboard>=2.12.2`
     - `pip install "detectron2@git+https://github.com/facebookresearch/detectron2.git@e2ce8dc#egg=detectron2"`
 
 At this point, you should be able to run the following code:
@@ -181,7 +182,9 @@ you can also uninstall the hooks with `pre-commit uninstall`.
 You can run this [Colab notebook](https://colab.research.google.com/drive/1U8VCjY2-x8c6y5TYMbSFtQGlQVFHCVIW) to run the examples below.
 
 The following examples show how to get started with the `unstructured` library.
-You can parse **TXT**, **HTML**, **PDF**, **EML**, **MSG**, **RTF**, **EPUB**, **DOC**, **DOCX**, **PPT**, **PPTX**, **JPG**,
+
+You can parse **TXT**, **HTML**, **XML**, **PDF**, **EML**, **MSG**, **RTF**, **EPUB**, **DOC**, **DOCX**,
+**XLSX**, **CSV**, **ODT**, **PPT**, **PPTX**, **JPG**,
 and **PNG** documents with one line of code!
 <br></br>
 See our [documentation page](https://unstructured-io.github.io/unstructured) for a full description
@@ -196,7 +199,7 @@ If you are using the `partition` brick, you may need to install additional param
 instructions outlined [here](https://unstructured-io.github.io/unstructured/installing.html#filetype-detection)
 `partition` will always apply the default arguments. If you need
 advanced features, use a document-specific brick. The `partition` brick currently works for
-`.txt`, `.doc`, `.docx`, `.ppt`, `.pptx`, `.jpg`, `.png`, `.eml`, `.msg`, `.html`, and `.pdf` documents.
+`.txt`, `.doc`, `.docx`, `.ppt`, `.pptx`, `.xlsx`, `.jpg`, `.png`, `.eml`, `.msg`, `.html`, and `.pdf` documents.
 
 ```python
 from unstructured.partition.auto import partition

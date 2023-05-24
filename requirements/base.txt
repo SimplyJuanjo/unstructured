@@ -18,6 +18,8 @@ certifi==2022.12.7
     #   unstructured (setup.py)
 cffi==1.15.1
     # via cryptography
+chardet==5.1.0
+    # via unstructured (setup.py)
 charset-normalizer==3.1.0
     # via
     #   pdfminer-six
@@ -98,9 +100,9 @@ python-pptx==0.6.21
     # via unstructured (setup.py)
 pytz==2023.3
     # via pandas
-regex==2023.5.2
+regex==2023.5.5
     # via nltk
-requests==2.29.0
+requests==2.30.0
     # via unstructured (setup.py)
 rfc3986[idna2008]==1.5.0
     # via httpx
@@ -121,7 +123,7 @@ typing-extensions==4.5.0
     # via
     #   pydantic
     #   rich
-urllib3==1.26.15
+urllib3==2.0.2
     # via requests
 wrapt==1.14.1
     # via

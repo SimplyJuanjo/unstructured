@@ -1,18 +1,117 @@
-## 0.6.3-dev1
+## 0.6.9-dev2
 
 ### Enhancements
 
+* fast strategy for pdf now keeps element bounding box data
+
+### Features
+
+### Fixes
+
+* Adds functionality to try other common encodings if an error related to the encoding is raised and the user has not specified an encoding.
+* Adds additional MIME types for CSV
+
+## 0.6.8
+
+### Enhancements
+
+### Features
+
+* Add `partition_csv` for CSV files.
+
+### Fixes
+
+## 0.6.7
+
+### Enhancements
+
+* Deprecate `--s3-url` in favor of `--remote-url` in CLI
+* Refactor out non-connector-specific config variables
+* Add `file_directory` to metadata
+* Add `page_name` to metadata. Currently used for the sheet name in XLSX documents.
+* Added a `--partition-strategy` parameter to unstructured-ingest so that users can specify
+  partition strategy in CLI. For example, `--partition-strategy fast`.
+* Added metadata for filetype.
+* Add Discord connector to pull messages from a list of channels
+* Refactor `unstructured/file-utils/filetype.py` to better utilise hashmap to return mime type.
+* Add local declaration of DOCX_MIME_TYPES and XLSX_MIME_TYPES for `test_filetype.py`.
+
+### Features
+
+* Add `partition_xml` for XML files.
+* Add `partition_xlsx` for Microsoft Excel documents.
+
+### Fixes
+
+* Supports `hml` filetype for partition as a variation of html filetype.
+* Makes `pytesseract` a function level import in `partition_pdf` so you can use the `"fast"`
+  or `"hi_res"` strategies if `pytesseract` is not installed. Also adds the
+  `required_dependencies` decorator for the `"hi_res"` and `"ocr_only"` strategies.
+* Fix to ensure `filename` is tracked in metadata for `docx` tables.
+
+## 0.6.6
+
+### Enhancements
+
+* Adds an `"auto"` strategy that chooses the partitioning strategy based on document
+  characteristics and function kwargs. This is the new default strategy for `partition_pdf`
+  and `partition_image`. Users can maintain existing behavior by explicitly setting
+  `strategy="hi_res"`.
+* Added an additional trace logger for NLP debugging.
+* Add `get_date` method to `ElementMetadata` for converting the datestring to a `datetime` object.
+* Cleanup the `filename` attribute on `ElementMetadata` to remove the full filepath.
+
+### Features
+
+* Added table reading as html with URL parsing to `partition_docx` in docx
+* Added metadata field for text_as_html for docx files
+
+### Fixes
+
+* `fileutils/file_type` check json and eml decode ignore error
+* `partition_email` was updated to more flexibly handle deviations from the RFC-2822 standard.
+  The time in the metadata returns `None` if the time does not match RFC-2822 at all.
+* Include all metadata fields when converting to dataframe or CSV
+
+## 0.6.5
+
+### Enhancements
+
+* Added support for SpooledTemporaryFile file argument.
+
+### Features
+
+### Fixes
+
+
+## 0.6.4
+
+### Enhancements
+
+* Added an "ocr_only" strategy for `partition_pdf`. Refactored the strategy decision
+  logic into its own module.
+
+### Features
+
+### Fixes
+
+## 0.6.3
+
+### Enhancements
+
+* Add an "ocr_only" strategy for `partition_image`.
 
 ### Features
 
 * Added `partition_multiple_via_api` for partitioning multiple documents in a single REST
   API call.
+* Added `stage_for_baseplate` function to prepare outputs for ingestion into Baseplate.
+* Added `partition_odt` for processing Open Office documents.
 
 ### Fixes
 
 * Updates the grouping logic in the `partition_pdf` fast strategy to group together text
   in the same bounding box.
-
 
 ## 0.6.2
 
@@ -20,6 +119,7 @@
 
 * Added logic to `partition_pdf` for detecting copy protected PDFs and falling back
   to the hi res strategy when necessary.
+
 
 ### Features
 

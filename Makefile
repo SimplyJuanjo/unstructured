@@ -1,7 +1,7 @@
 PACKAGE_NAME := unstructured
-PIP_VERSION := 22.2.1
+PIP_VERSION := 23.1.2
 CURRENT_DIR := $(shell pwd)
-
+ARCH := $(shell uname -m)
 
 .PHONY: help
 help: Makefile
@@ -63,6 +63,10 @@ install-ingest-s3:
 install-ingest-azure:
 	python3 -m pip install -r requirements/ingest-azure.txt
 
+.PHONY: install-ingest-discord
+install-ingest-discord:
+	pip install -r requirements/ingest-discord.txt
+
 .PHONY: install-ingest-github
 install-ingest-github:
 	python3 -m pip install -r requirements/ingest-github.txt
@@ -87,8 +91,14 @@ install-ingest-wikipedia:
 install-unstructured-inference:
 	python3 -m pip install -r requirements/local-inference.txt
 
+.PHONY: install-tensorboard
+install-tensorboard:
+	@if [ ${ARCH} = "arm64" ] || [ ${ARCH} = "aarch64" ]; then\
+		python3 -m pip install tensorboard>=2.12.2;\
+	fi
+
 .PHONY: install-detectron2
-install-detectron2:
+install-detectron2: install-tensorboard
 	python3 -m pip install "detectron2@git+https://github.com/facebookresearch/detectron2.git@e2ce8dc#egg=detectron2"
 
 ## install-local-inference: installs requirements for local inference
@@ -113,6 +123,7 @@ pip-compile:
 	cp requirements/build.txt docs/requirements.txt
 	pip-compile --upgrade --extra=s3        --output-file=requirements/ingest-s3.txt        requirements/base.txt setup.py
 	pip-compile --upgrade --extra=azure     --output-file=requirements/ingest-azure.txt     requirements/base.txt setup.py
+	pip-compile --upgrade --extra=discord   --output-file=requirements/ingest-azure.txt     requirements/base.txt setup.py
 	pip-compile --upgrade --extra=reddit    --output-file=requirements/ingest-reddit.txt    requirements/base.txt setup.py
 	pip-compile --upgrade --extra=github    --output-file=requirements/ingest-github.txt    requirements/base.txt setup.py
 	pip-compile --upgrade --extra=gitlab    --output-file=requirements/ingest-gitlab.txt    requirements/base.txt setup.py

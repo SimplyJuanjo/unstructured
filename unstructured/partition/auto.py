@@ -3,9 +3,15 @@ from typing import IO, Callable, Dict, Optional, Tuple
 
 import requests
 
-from unstructured.file_utils.filetype import FileType, detect_filetype
+from unstructured.file_utils.filetype import (
+    FILETYPE_TO_MIMETYPE,
+    STR_TO_FILETYPE,
+    FileType,
+    detect_filetype,
+)
 from unstructured.logger import logger
 from unstructured.partition.common import exactly_one
+from unstructured.partition.csv import partition_csv
 from unstructured.partition.doc import partition_doc
 from unstructured.partition.docx import partition_docx
 from unstructured.partition.email import partition_email
@@ -15,11 +21,14 @@ from unstructured.partition.image import partition_image
 from unstructured.partition.json import partition_json
 from unstructured.partition.md import partition_md
 from unstructured.partition.msg import partition_msg
+from unstructured.partition.odt import partition_odt
 from unstructured.partition.pdf import partition_pdf
 from unstructured.partition.ppt import partition_ppt
 from unstructured.partition.pptx import partition_pptx
 from unstructured.partition.rtf import partition_rtf
 from unstructured.partition.text import partition_text
+from unstructured.partition.xlsx import partition_xlsx
+from unstructured.partition.xml import partition_xml
 
 
 def partition(
@@ -29,13 +38,14 @@ def partition(
     file_filename: Optional[str] = None,
     url: Optional[str] = None,
     include_page_breaks: bool = False,
-    strategy: str = "hi_res",
+    strategy: str = "auto",
     encoding: str = "utf-8",
     paragraph_grouper: Optional[Callable[[str], str]] = None,
     headers: Dict[str, str] = {},
     ssl_verify: bool = True,
     ocr_languages: str = "eng",
     pdf_infer_table_structure: bool = False,
+    xml_keep_tags: bool = False,
 ):
     """Partitions a document into its constituent elements. Will use libmagic to determine
     the file's type and route it to the appropriate partitioning function. Applies the default
@@ -76,6 +86,9 @@ def partition(
         additional metadata field, "text_as_html," where the value (string) is a just a
         transformation of the data into an HTML <table>.
         The "text" field for a partitioned Table Element is always present, whether True or False.
+    xml_keep_tags
+        If True, will retain the XML tags in the output. Otherwise it will simply extract
+        the text from within the tags. Only applies to partition_xml.
     """
     exactly_one(file=file, filename=filename, url=url)
 
@@ -106,6 +119,8 @@ def partition(
         elements = partition_doc(filename=filename, file=file)
     elif filetype == FileType.DOCX:
         elements = partition_docx(filename=filename, file=file)
+    elif filetype == FileType.ODT:
+        elements = partition_odt(filename=filename, file=file)
     elif filetype == FileType.EML:
         elements = partition_email(filename=filename, file=file, encoding=encoding)
     elif filetype == FileType.MSG:
@@ -116,6 +131,13 @@ def partition(
             file=file,
             include_page_breaks=include_page_breaks,
             encoding=encoding,
+        )
+    elif filetype == FileType.XML:
+        elements = partition_xml(
+            filename=filename,
+            file=file,
+            encoding=encoding,
+            xml_keep_tags=xml_keep_tags,
         )
     elif filetype == FileType.EPUB:
         elements = partition_epub(
@@ -175,12 +197,23 @@ def partition(
         )
     elif filetype == FileType.JSON:
         elements = partition_json(filename=filename, file=file)
+    elif filetype == FileType.XLSX:
+        elements = partition_xlsx(filename=filename, file=file)
+    elif filetype == FileType.CSV:
+        elements = partition_csv(filename=filename, file=file)
     else:
         msg = "Invalid file" if not filename else f"Invalid file {filename}"
         raise ValueError(f"{msg}. The {filetype} file type is not supported in partition.")
 
     for element in elements:
         element.metadata.url = url
+        if content_type is not None:
+            out_filetype = STR_TO_FILETYPE.get(content_type)
+            element.metadata.filetype = (
+                FILETYPE_TO_MIMETYPE[out_filetype] if out_filetype is not None else None
+            )
+        else:
+            element.metadata.filetype = FILETYPE_TO_MIMETYPE[filetype]
 
     return elements
 

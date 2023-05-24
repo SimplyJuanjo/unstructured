@@ -5,6 +5,7 @@ import multiprocessing as mp
 import sys
 import warnings
 from contextlib import suppress
+from functools import partial
 from pathlib import Path
 from urllib.parse import urlparse
 
@@ -143,6 +144,12 @@ class MainProcess:
     "Default: https://api.unstructured.io/general/v0/general",
 )
 @click.option(
+    "--partition-strategy",
+    default="auto",
+    help="The method that will be used to process the documents. "
+    "Default: auto. Other strategies include `fast` and `hi_res`.",
+)
+@click.option(
     "--local-input-path",
     default=None,
     help="Path to the location in the local file system that will be processed.",
@@ -164,12 +171,6 @@ class MainProcess:
     default=None,
     help="Remote fsspec URL formatted as `protocol://dir/path`, it can contain both "
     "a directory or a single file. Supported protocols are: `s3`, `s3a`, `abfs`, and `az`.",
-)
-@click.option(
-    "--s3-url",
-    default=None,
-    help="Prefix of s3 objects (files) to download. E.g. s3://bucket1/path/. This value may "
-    "also be a single file. To be deprecated in favor of --remote-url.",
 )
 @click.option(
     "--s3-anonymous",
@@ -345,6 +346,22 @@ class MainProcess:
     "YYYY-MM-DD+HH:MM:SS or YYYY-MM-DDTHH:MM:SStz",
 )
 @click.option(
+    "--discord-channels",
+    default=None,
+    help="A comma separated list of discord channel ids to ingest from.",
+)
+@click.option(
+    "--discord-token",
+    default=None,
+    help="Bot token used to access Discord API, must have "
+    "READ_MESSAGE_HISTORY scope for the bot user",
+)
+@click.option(
+    "--discord-period",
+    default=None,
+    help="Number of days to go back in the history of discord channels, must be an number",
+)
+@click.option(
     "--download-dir",
     help="Where files are downloaded to, defaults to `$HOME/.cache/unstructured/ingest/<SHA256>`.",
 )
@@ -376,7 +393,6 @@ class MainProcess:
 @click.option("-v", "--verbose", is_flag=True, default=False)
 def main(
     remote_url,
-    s3_url,  # TODO: deprecate this in the next minor release
     s3_anonymous,
     azure_account_name,
     azure_account_key,
@@ -407,6 +423,9 @@ def main(
     slack_token,
     start_date,
     end_date,
+    discord_channels,
+    discord_token,
+    discord_period,
     download_dir,
     preserve_downloads,
     structured_output_dir,
@@ -420,6 +439,7 @@ def main(
     max_docs,
     partition_by_api,
     partition_endpoint,
+    partition_strategy,
     local_input_path,
     local_recursive,
     local_file_glob,
@@ -458,17 +478,12 @@ def main(
             "but --download-dir is specified.",
         )
         sys.exit(1)
+    from unstructured.ingest.interfaces import StandardConnectorConfig
+
     if local_input_path is None and not download_dir:
         cache_path = Path.home() / ".cache" / "unstructured" / "ingest"
         if not cache_path.exists():
             cache_path.mkdir(parents=True, exist_ok=True)
-        if s3_url:
-            warnings.warn(
-                "The `--s3-url` option will be deprecated in favor of `--remote-url`"
-                " in the next minor release.",
-                DeprecationWarning,
-            )
-            remote_url = s3_url
         if remote_url:
             hashed_dir_name = hashlib.sha256(remote_url.encode("utf-8"))
         elif github_url:
@@ -511,26 +526,29 @@ def main(
                 f"Preserving downloaded files but --download-dir is not specified,"
                 f" using {download_dir}",
             )
+    standard_config = StandardConnectorConfig(
+        download_dir=download_dir,
+        output_dir=structured_output_dir,
+        download_only=download_only,
+        fields_include=fields_include,
+        flatten_metadata=flatten_metadata,
+        metadata_exclude=metadata_exclude,
+        metadata_include=metadata_include,
+        partition_by_api=partition_by_api,
+        partition_endpoint=partition_endpoint,
+        preserve_downloads=preserve_downloads,
+        re_download=re_download,
+    )
     if remote_url:
         protocol = urlparse(remote_url).scheme
         if protocol in ("s3", "s3a"):
             from unstructured.ingest.connector.s3 import S3Connector, SimpleS3Config
 
             doc_connector = S3Connector(  # type: ignore
+                standard_config=standard_config,
                 config=SimpleS3Config(
-                    path=s3_url,
+                    path=remote_url,
                     access_kwargs={"anon": s3_anonymous},
-                    download_dir=download_dir,
-                    output_dir=structured_output_dir,
-                    re_download=re_download,
-                    preserve_downloads=preserve_downloads,
-                    metadata_include=metadata_include,
-                    metadata_exclude=metadata_exclude,
-                    partition_by_api=partition_by_api,
-                    partition_endpoint=partition_endpoint,
-                    fields_include=fields_include,
-                    flatten_metadata=flatten_metadata,
-                    download_only=download_only,
                 ),
             )
         elif protocol in ("abfs", "az"):
@@ -549,20 +567,10 @@ def main(
             else:
                 access_kwargs = {}
             doc_connector = AzureBlobStorageConnector(  # type: ignore
+                standard_config=standard_config,
                 config=SimpleAzureBlobStorageConfig(
                     path=remote_url,
                     access_kwargs=access_kwargs,
-                    download_dir=download_dir,
-                    output_dir=structured_output_dir,
-                    re_download=re_download,
-                    preserve_downloads=preserve_downloads,
-                    metadata_include=metadata_include,
-                    metadata_exclude=metadata_exclude,
-                    partition_by_api=partition_by_api,
-                    partition_endpoint=partition_endpoint,
-                    fields_include=fields_include,
-                    flatten_metadata=flatten_metadata,
-                    download_only=download_only,
                 ),
             )
         else:
@@ -579,19 +587,9 @@ def main(
             )
 
             doc_connector = FsspecConnector(  # type: ignore
+                standard_config=standard_config,
                 config=SimpleFsspecConfig(
                     path=remote_url,
-                    download_dir=download_dir,
-                    output_dir=structured_output_dir,
-                    re_download=re_download,
-                    preserve_downloads=preserve_downloads,
-                    metadata_include=metadata_include,
-                    metadata_exclude=metadata_exclude,
-                    partition_by_api=partition_by_api,
-                    partition_endpoint=partition_endpoint,
-                    fields_include=fields_include,
-                    flatten_metadata=flatten_metadata,
-                    download_only=download_only,
                 ),
             )
     elif github_url:
@@ -601,23 +599,12 @@ def main(
         )
 
         doc_connector = GitHubConnector(  # type: ignore
+            standard_config=standard_config,
             config=SimpleGitHubConfig(
                 url=github_url,
                 access_token=git_access_token,
                 branch=git_branch,
                 file_glob=git_file_glob,
-                # defaults params:
-                download_dir=download_dir,
-                preserve_downloads=preserve_downloads,
-                output_dir=structured_output_dir,
-                re_download=re_download,
-                metadata_include=metadata_include,
-                metadata_exclude=metadata_exclude,
-                partition_by_api=partition_by_api,
-                partition_endpoint=partition_endpoint,
-                fields_include=fields_include,
-                flatten_metadata=flatten_metadata,
-                download_only=download_only,
             ),
         )
     elif gitlab_url:
@@ -627,23 +614,12 @@ def main(
         )
 
         doc_connector = GitLabConnector(  # type: ignore
+            standard_config=standard_config,
             config=SimpleGitLabConfig(
                 url=gitlab_url,
                 access_token=git_access_token,
                 branch=git_branch,
                 file_glob=git_file_glob,
-                # defaults params:
-                download_dir=download_dir,
-                preserve_downloads=preserve_downloads,
-                output_dir=structured_output_dir,
-                re_download=re_download,
-                metadata_include=metadata_include,
-                metadata_exclude=metadata_exclude,
-                partition_by_api=partition_by_api,
-                partition_endpoint=partition_endpoint,
-                fields_include=fields_include,
-                flatten_metadata=flatten_metadata,
-                download_only=download_only,
             ),
         )
     elif subreddit_name:
@@ -653,6 +629,7 @@ def main(
         )
 
         doc_connector = RedditConnector(  # type: ignore
+            standard_config=standard_config,
             config=SimpleRedditConfig(
                 subreddit_name=subreddit_name,
                 client_id=reddit_client_id,
@@ -660,18 +637,6 @@ def main(
                 user_agent=reddit_user_agent,
                 search_query=reddit_search_query,
                 num_posts=reddit_num_posts,
-                # defaults params:
-                download_dir=download_dir,
-                preserve_downloads=preserve_downloads,
-                output_dir=structured_output_dir,
-                re_download=re_download,
-                metadata_include=metadata_include,
-                metadata_exclude=metadata_exclude,
-                partition_by_api=partition_by_api,
-                partition_endpoint=partition_endpoint,
-                fields_include=fields_include,
-                flatten_metadata=flatten_metadata,
-                download_only=download_only,
             ),
         )
     elif slack_channels:
@@ -681,36 +646,36 @@ def main(
         )
 
         doc_connector = SlackConnector(  # type: ignore
+            standard_config=standard_config,
             config=SimpleSlackConfig(
                 channels=SimpleSlackConfig.parse_channels(slack_channels),
                 token=slack_token,
                 oldest=start_date,
                 latest=end_date,
-                # defaults params:
-                download_dir=download_dir,
-                preserve_downloads=preserve_downloads,
-                output_dir=structured_output_dir,
-                re_download=re_download,
+                verbose=verbose,
+            ),
+        )
+    elif discord_channels:
+        from unstructured.ingest.connector.discord import (
+            DiscordConnector,
+            SimpleDiscordConfig,
+        )
+
+        doc_connector = DiscordConnector(  # type: ignore
+            standard_config=standard_config,
+            config=SimpleDiscordConfig(
+                channels=SimpleDiscordConfig.parse_channels(discord_channels),
+                days=discord_period,
+                token=discord_token,
                 verbose=verbose,
             ),
         )
     elif wikipedia_page_title:
         doc_connector = WikipediaConnector(  # type: ignore
+            standard_config=standard_config,
             config=SimpleWikipediaConfig(
                 title=wikipedia_page_title,
                 auto_suggest=wikipedia_auto_suggest,
-                # defaults params:
-                download_dir=download_dir,
-                preserve_downloads=preserve_downloads,
-                output_dir=structured_output_dir,
-                re_download=re_download,
-                metadata_include=metadata_include,
-                metadata_exclude=metadata_exclude,
-                partition_by_api=partition_by_api,
-                partition_endpoint=partition_endpoint,
-                fields_include=fields_include,
-                flatten_metadata=flatten_metadata,
-                download_only=download_only,
             ),
         )
     elif drive_id:
@@ -720,23 +685,12 @@ def main(
         )
 
         doc_connector = GoogleDriveConnector(  # type: ignore
+            standard_config=standard_config,
             config=SimpleGoogleDriveConfig(
                 drive_id=drive_id,
                 service_account_key=drive_service_account_key,
                 recursive=drive_recursive,
                 extension=drive_extension,
-                # defaults params:
-                download_dir=download_dir,
-                preserve_downloads=preserve_downloads,
-                output_dir=structured_output_dir,
-                re_download=re_download,
-                metadata_include=metadata_include,
-                metadata_exclude=metadata_exclude,
-                partition_by_api=partition_by_api,
-                partition_endpoint=partition_endpoint,
-                fields_include=fields_include,
-                flatten_metadata=flatten_metadata,
-                download_only=download_only,
             ),
         )
     elif biomed_path or biomed_api_id or biomed_api_from or biomed_api_until:
@@ -746,23 +700,12 @@ def main(
         )
 
         doc_connector = BiomedConnector(  # type: ignore
+            standard_config=standard_config,
             config=SimpleBiomedConfig(
                 path=biomed_path,
                 id_=biomed_api_id,
                 from_=biomed_api_from,
                 until=biomed_api_until,
-                # defaults params:
-                download_dir=download_dir,
-                preserve_downloads=preserve_downloads,
-                output_dir=structured_output_dir,
-                re_download=re_download,
-                metadata_include=metadata_include,
-                metadata_exclude=metadata_exclude,
-                partition_by_api=partition_by_api,
-                partition_endpoint=partition_endpoint,
-                fields_include=fields_include,
-                flatten_metadata=flatten_metadata,
-                download_only=download_only,
             ),
         )
     elif local_input_path:
@@ -772,18 +715,11 @@ def main(
         )
 
         doc_connector = LocalConnector(  # type: ignore
+            standard_config=standard_config,
             config=SimpleLocalConfig(
                 input_path=local_input_path,
                 recursive=local_recursive,
                 file_glob=local_file_glob,
-                # defaults params:
-                output_dir=structured_output_dir,
-                metadata_include=metadata_include,
-                metadata_exclude=metadata_exclude,
-                partition_by_api=partition_by_api,
-                partition_endpoint=partition_endpoint,
-                fields_include=fields_include,
-                flatten_metadata=flatten_metadata,
             ),
         )
     # Check for other connector-specific options here and define the doc_connector object
@@ -793,9 +729,14 @@ def main(
         logger.error("No connector-specific option was specified!")
         sys.exit(1)
 
+    process_document_with_partition_strategy = partial(
+        process_document,
+        strategy=partition_strategy,
+    )
+
     MainProcess(
         doc_connector=doc_connector,
-        doc_processor_fn=process_document,
+        doc_processor_fn=process_document_with_partition_strategy,
         num_processes=num_processes,
         reprocess=reprocess,
         verbose=verbose,

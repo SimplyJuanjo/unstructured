@@ -107,7 +107,7 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libmagic-dev poppler-utils libreoffice pandoc
         sudo add-apt-repository -y ppa:alex-p/tesseract-ocr5
-        sudo apt-get install -y tesseract-ocr
+        sudo apt-get install -y tesseract-ocr tesseract-ocr-kor
         tesseract --version
         make test
         make check-coverage
@@ -141,6 +141,7 @@ jobs:
       env:
         GH_READ_ONLY_ACCESS_TOKEN: ${{ secrets.GH_READ_ONLY_ACCESS_TOKEN }}
         SLACK_TOKEN: ${{ secrets.SLACK_TOKEN }}
+        DISCORD_TOKEN: ${{ secrets.DISCORD_TOKEN }}
       run: |
         source .venv/bin/activate
         make install-detectron2
@@ -151,6 +152,7 @@ jobs:
         tesseract --version
         make install-ingest-s3
         make install-ingest-azure
+        make install-ingest-discord
         make install-ingest-github
         make install-ingest-gitlab
         make install-ingest-slack

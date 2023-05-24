@@ -7,6 +7,7 @@ from unstructured.documents.elements import (
     Address,
     ListItem,
     NarrativeText,
+    Table,
     Text,
     Title,
 )
@@ -62,6 +63,21 @@ def test_partition_docx_with_filename(mock_document, expected_elements, tmpdir):
     assert elements == expected_elements
 
 
+def test_partition_docx_with_spooled_file(mock_document, expected_elements, tmpdir):
+    # Test that the partition_docx function can handle a SpooledTemporaryFile
+    filename = os.path.join(tmpdir.dirname, "mock_document.docx")
+    mock_document.save(filename)
+
+    from tempfile import SpooledTemporaryFile
+
+    with open(filename, "rb") as test_file:
+        spooled_temp_file = SpooledTemporaryFile()
+        spooled_temp_file.write(test_file.read())
+        spooled_temp_file.seek(0)
+        elements = partition_docx(file=spooled_temp_file)
+        assert elements == expected_elements
+
+
 def test_partition_docx_with_file(mock_document, expected_elements, tmpdir):
     filename = os.path.join(tmpdir.dirname, "mock_document.docx")
     mock_document.save(filename)
@@ -82,3 +98,21 @@ def test_partition_docx_raises_with_both_specified(mock_document, tmpdir):
 def test_partition_docx_raises_with_neither():
     with pytest.raises(ValueError):
         partition_docx()
+
+
+def test_partition_docx_processes_table(filename="example-docs/fake_table.docx"):
+    elements = partition_docx(filename=filename)
+
+    assert isinstance(elements[0], Table)
+    assert (
+        elements[0].metadata.text_as_html
+        == """<table>
+<thead>
+<tr><th>Header Col 1   </th><th>Header Col 2  </th></tr>
+</thead>
+<tbody>
+<tr><td>Lorem ipsum    </td><td>A Link example</td></tr>
+</tbody>
+</table>"""
+    )
+    assert elements[0].metadata.filename == "fake_table.docx"
