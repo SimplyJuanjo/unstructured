@@ -238,11 +238,12 @@ def process_data():
         # TODO: match text lang from ms_detect_request to unstructured available languages
         # Extract the text from the PDF in high resolution
         unstructured_kwargs = {
-            "strategy": "hi_res",
-            "ocr_languages": "eng+spa",
+            "strategy": "ocr_only",
+            "ocr_languages": "spa",
         }
         loader_2 = UnstructuredFileLoader(temp_file_path, **unstructured_kwargs)
         data_2 = loader_2.load()
+        data_2[0].metadata["doc_id"] = doc_id
 
         data_time = time.time()
         print(f"Data 2 loaded in {data_time - start_time} seconds")
@@ -254,12 +255,72 @@ def process_data():
         upload_blob_response = block_blob_client.upload_blob(data=data_2[0].page_content)
         print(upload_blob_response)
 
+        print(len(data_2[0].page_content))
+        # The maximum number of characters that can be translated per request is 50000, so we need to split the text
+        # into chunks of 50000 characters
+        chunks_2 = [data_2[0].page_content[i:i+50000] for i in range(0, len(data_2[0].page_content), 50000)]
+        print(len(chunks_2))
+
+        completed_translation = ""
+        for i, chunk in enumerate(chunks_2):
+            body = [{
+            'text': chunk,
+            }]
+            trans_response = requests.post(constructed_url_2, headers=headers, json=body)
+            translated_text = trans_response.json()[0]['translations'][0]['text']
+            completed_translation += translated_text
+            print(f"Chunk {i} translated")
+            print(len(completed_translation))
+
+        end_translate_time = time.time()
+        print(f"Translation done in {end_translate_time - translate_time} seconds")
+
         message["status"] = "hi_res extracted done"
         service_client.send_to_group(
             user_id,
             json.dumps(message),
             content_type="application/json"
         )
+
+        # Process the PDF data
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        data_2[0].page_content = completed_translation
+        texts = text_splitter.split_documents(data_2)
+        embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+
+        metadatas = []
+        for text in texts:
+            metadatas.append({
+                "source": text.metadata["source"],
+                "doc_id": text.metadata["doc_id"],
+            })
+
+        try:
+            active_indexes = pinecone.list_indexes()
+            if not index_name in active_indexes:
+                print("Creating index")
+                pinecone.create_index(index_name, dimension=1536, metric="cosine", pods=1, pod_type="p1.x1")
+
+            vectorstore = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, metadatas=metadatas)
+            print("Index created", vectorstore)
+            
+        except Exception as e:
+            message["status"] = "index creation failed"
+            service_client.send_to_group(
+                user_id,
+                json.dumps(message),
+                content_type="application/json"
+            )
+            print(e)
+            raise e
+            
+        else:
+            message["status"] = "index created, let chat"
+            service_client.send_to_group(
+                user_id,
+                json.dumps(message),
+                content_type="application/json"
+            )
 
         os.remove(temp_file_path)
 
