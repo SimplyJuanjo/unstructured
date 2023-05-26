@@ -26,6 +26,8 @@ from azure.messaging.webpubsubservice import WebPubSubServiceClient
 from azure.core.credentials import AzureKeyCredential
 import uuid
 
+from deepl_utils import get_deepl_code, translate
+
 app = Flask(__name__)
 
 
@@ -118,41 +120,50 @@ def process_data():
 
         print(json.dumps(response, sort_keys=True, indent=4, ensure_ascii=False, separators=(',', ': ')))
         language = response[0]['language']
-        print(response[0]['language'])
+        # See if the language is supported by DeepL
+        deepl_code = get_deepl_code(language)
+        if deepl_code is not None:
+            print(f"Language {language} is supported by DeepL with code {deepl_code}")
+            # Translate the text to English
+            print(len(data[0].page_content))
+            # The maximum number of characters that can be translated per request is 100000, so we need to split the text
+            # into chunks of 100000 characters
+            chunks = [data[0].page_content[i:i+100000] for i in range(0, len(data[0].page_content), 100000)]
+            print(len(chunks))
 
-        path_2 = '/translate?api-version=3.0'
-        params = '&from=' + language + '&to=en'
-        constructed_url_2 = base_url + path_2 + params
+            completed_translation = ""
+            for i, chunk in enumerate(chunks):
+                translated_text = translate(chunk, "EN-US")
+                completed_translation += translated_text
+                print(f"Chunk {i} translated")
+                print(len(completed_translation))
+        else:
+            print(f"Language {language} is not supported by DeepL")
+            print(response[0]['language'])
 
-        print(len(data[0].page_content))
-        # The maximum number of characters that can be translated per request is 50000, so we need to split the text
-        # into chunks of 50000 characters
-        chunks = [data[0].page_content[i:i+50000] for i in range(0, len(data[0].page_content), 50000)]
-        print(len(chunks))
+            path_2 = '/translate?api-version=3.0'
+            params = '&from=' + language + '&to=en'
+            constructed_url_2 = base_url + path_2 + params
 
-        # body = [{
-        # 'text': data[0].page_content,
-        # }]  
+            print(len(data[0].page_content))
+            # The maximum number of characters that can be translated per request is 50000, so we need to split the text
+            # into chunks of 50000 characters
+            chunks = [data[0].page_content[i:i+50000] for i in range(0, len(data[0].page_content), 50000)]
+            print(len(chunks))
 
-        # trans_request = requests.post(constructed_url_2, headers=headers, json=body)
-        # response = trans_request.json()
+            completed_translation = ""
+            for i, chunk in enumerate(chunks):
+                body = [{
+                'text': chunk,
+                }]
+                trans_response = requests.post(constructed_url_2, headers=headers, json=body)
+                translated_text = trans_response.json()[0]['translations'][0]['text']
+                completed_translation += translated_text
+                print(f"Chunk {i} translated")
+                print(len(completed_translation))
 
-        completed_translation = ""
-        for i, chunk in enumerate(chunks):
-            body = [{
-            'text': chunk,
-            }]
-            trans_response = requests.post(constructed_url_2, headers=headers, json=body)
-            translated_text = trans_response.json()[0]['translations'][0]['text']
-            completed_translation += translated_text
-            print(f"Chunk {i} translated")
-            print(len(completed_translation))
-
-        end_translate_time = time.time()
-        print(f"Translation done in {end_translate_time - translate_time} seconds")
-
-        # print(json.dumps(trans_response, sort_keys=True, indent=4, ensure_ascii=False, separators=(',', ': ')))
-        # print(response[0]['translations'][0]['text'])
+            end_translate_time = time.time()
+            print(f"Translation done in {end_translate_time - translate_time} seconds")
 
         # Send the data to Azure Blob Storage
         container_name = url.split("/")[3]
@@ -255,22 +266,38 @@ def process_data():
         upload_blob_response = block_blob_client.upload_blob(data=data_2[0].page_content)
         print(upload_blob_response)
 
-        print(len(data_2[0].page_content))
-        # The maximum number of characters that can be translated per request is 50000, so we need to split the text
-        # into chunks of 50000 characters
-        chunks_2 = [data_2[0].page_content[i:i+50000] for i in range(0, len(data_2[0].page_content), 50000)]
-        print(len(chunks_2))
+        if deepl_code is not None:
+            print(f"Language {language} is supported by DeepL with code {deepl_code}")
+            # Translate the text to English
+            print(len(data_2[0].page_content))
+            # The maximum number of characters that can be translated per request is 100000, so we need to split the text
+            # into chunks of 100000 characters
+            chunks = [data_2[0].page_content[i:i+100000] for i in range(0, len(data_2[0].page_content), 100000)]
+            print(len(chunks))
 
-        completed_translation = ""
-        for i, chunk in enumerate(chunks_2):
-            body = [{
-            'text': chunk,
-            }]
-            trans_response = requests.post(constructed_url_2, headers=headers, json=body)
-            translated_text = trans_response.json()[0]['translations'][0]['text']
-            completed_translation += translated_text
-            print(f"Chunk {i} translated")
-            print(len(completed_translation))
+            completed_translation = ""
+            for i, chunk in enumerate(chunks):
+                translated_text = translate(chunk, "EN-US")
+                completed_translation += translated_text
+                print(f"Chunk {i} translated")
+                print(len(completed_translation))
+        else:
+            print(len(data_2[0].page_content))
+            # The maximum number of characters that can be translated per request is 50000, so we need to split the text
+            # into chunks of 50000 characters
+            chunks_2 = [data_2[0].page_content[i:i+50000] for i in range(0, len(data_2[0].page_content), 50000)]
+            print(len(chunks_2))
+
+            completed_translation = ""
+            for i, chunk in enumerate(chunks_2):
+                body = [{
+                'text': chunk,
+                }]
+                trans_response = requests.post(constructed_url_2, headers=headers, json=body)
+                translated_text = trans_response.json()[0]['translations'][0]['text']
+                completed_translation += translated_text
+                print(f"Chunk {i} translated")
+                print(len(completed_translation))
 
         end_translate_time = time.time()
         print(f"Translation done in {end_translate_time - translate_time} seconds")

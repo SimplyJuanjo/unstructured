@@ -39,7 +39,8 @@ RUN python3.8 -m pip install pip==${PIP_VERSION} && \
   pip install --no-cache openai && \
   pip install --no-cache tiktoken && \
   pip install --no-cache azure-storage-blob azure-identity && \
-  pip install --no-cache azure-messaging-webpubsubservice
+  pip install --no-cache azure-messaging-webpubsubservice && \
+  pip install --no-cache deepl
 
 COPY example-docs example-docs
 COPY unstructured unstructured
@@ -48,6 +49,7 @@ RUN python3.8 -c "import nltk; nltk.download('punkt')" && \
   python3.8 -c "import nltk; nltk.download('averaged_perceptron_tagger')" && \
   python3.8 -c "from unstructured.ingest.doc_processor.generalized import initialize; initialize()"
 
+COPY deepl_utils.py deepl_utils.py
 COPY create_index.py create_index.py
 
 # Make port 80 available to the world outside this container
