@@ -25,6 +25,9 @@ from azure.storage.blob import BlobServiceClient, BlobClient, ContainerClient
 from azure.messaging.webpubsubservice import WebPubSubServiceClient
 from azure.core.credentials import AzureKeyCredential
 import uuid
+from langchain import OpenAI, LLMChain, PromptTemplate
+from langchain.agents import AgentType
+from langchain.prompts.chat import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate, MessagesPlaceholder
 
 from deepl_utils import get_deepl_code, translate
 
@@ -380,4 +383,53 @@ def process_data():
         raise e
 
 if __name__ == '__main__':
+    pinecone.init(
+        api_key="2d30ef3f-7422-4dbd-b0b6-9ac9a065bc71",
+        environment="us-east-1-aws",
+    )
+
+    index_name = "enfermedadesrarasbookocr"
+    active_indexes = pinecone.list_indexes()
+    if not index_name in active_indexes:
+        print("Creating index")
+        pinecone.create_index(index_name, dimension=1536, metric="cosine", pods=1, pod_type="p1.x1")
+    bookpath = "hijo_enf_rara.pdf"
+    unstructured_kwargs = {
+            "strategy": "ocr_only",
+            "ocr_languages": "spa",
+        }
+    # Check if file exists
+    if not os.path.isfile(bookpath):
+        print(f"File {bookpath} not found")
+        
+    print(f"Loading {bookpath}")
+    loader = UnstructuredFileLoader(bookpath, **unstructured_kwargs)
+
+    data = loader.load()
+    text_splitter = RecursiveCharacterTextSplitter(chunk_size=2000, chunk_overlap=500)
+    texts = text_splitter.split_documents(data)
+
+    # Iterate over the texts and call LLMchain to fix the OCR errors
+    human_message_prompt = HumanMessagePromptTemplate.from_template("""Estás arreglando los errores de OCR en un libro sobre enfermedades raras. El libro está en español. Estás arreglando los errores en el siguiente párrafo:
+
+        <<<{input}>>>
+
+        No inventes ninguna información. Si no estás seguro de una palabra, déjala como está.
+        """)
+    chat_prompt = ChatPromptTemplate.from_messages([human_message_prompt])
+    ocr_fixer = LLMChain(llm=ChatOpenAI(model_name="gpt-3.5-turbo" ,temperature=0), prompt=chat_prompt)
+    final_texts = []
+    for i in range(len(texts)):
+        print(f"Fixing OCR errors in text: \n{texts[i].page_content}")
+        print(f"Fixing OCR errors in text {i}")
+        fixed_text = ocr_fixer.run(texts[i].page_content)
+        final_texts.append(fixed_text)
+        print(f"Fixed text: \n{fixed_text}")
+
+    print(f'Now you have {len(texts)} documents')
+
+    embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
+
+    vStore = Pinecone.from_texts([t for t in final_texts], embeddings, index_name=index_name)
+    raise Exception("stop")
     app.run(debug=True, host='0.0.0.0', port=8080)
