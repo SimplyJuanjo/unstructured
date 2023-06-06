@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import Pinecone
-from langchain.document_loaders import UnstructuredFileLoader
+from langchain.document_loaders import UnstructuredFileLoader, PDFMinerLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
 import pinecone
@@ -235,84 +235,59 @@ def process_data():
             vectorstore = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, metadatas=metadatas)
             print("Index created", vectorstore)
             print(f"Indexing done in {time.time() - pinecone_time} seconds PINECONE")
+        
         # try:
-        #     # We will use mongodb to store the embeddings
-        #     mongo_client = MongoClient(MONGO_CONNECTION_STRING)
-        #     print("Mongo client created", mongo_client)
-        #     vectorstore = MongoDBAtlasVectorSearch.from_texts(
-        #     [t.page_content for t in texts],
-        #     embeddings,
-        #     client=mongo_client,
-        #     namespace=NAMESPACE,
-        #     index_name=INDEX_NAME,
-        #     metadatas=metadatas,
-        #     )
-        #     print("Index created", vectorstore)
-
-        #     # retriever = VectorStoreRetriever(vectorstore=vectorstore)#, search_kwargs={"filter":{"doc_id": doc_id}})#, "include_metadata": True})
-        #     # # docs = retriever.get_relevant_documents("patient's name?")
-        #     # model = RetrievalQA.from_chain_type(llm=ChatOpenAI(model_name="gpt-4", temperature=0, request_timeout=500), chain_type="stuff", retriever=retriever)
-            
-        #     # answer = model.run("nombre del paciente?")
-        #     answer = vectorstore.similarity_search("diagnosis", k=3)
-
-        #     print(answer)
-        #     raise Exception("stop")
-        # try:
-            collection, db = setup_cosmos_connection(DB_NAME, COLLECTION_NAME)
+            # collection, db = setup_cosmos_connection(DB_NAME, COLLECTION_NAME)
 
             # # Delete the collection to reset the DB tests
             # collection.delete_many({})
 
-            cosmos_time = time.time()
-            # Print the sliced records
-            for i, record in enumerate(texts):
-                insert_requests(record.page_content, collection)
-                # if i < 5:
-                #     print(record.page_content[0:100])
-                #     print('-------------------')
+            # cosmos_time = time.time()
+            # # Print the sliced records
+            # for i, record in enumerate(texts):
+            #     insert_requests(record.page_content, collection)
 
-            create_index(collection, db, COLLECTION_NAME)
+            # create_index(collection, db, COLLECTION_NAME)
 
-            print(f'number of records in the vector DB: {collection.count_documents({})}')
+            # print(f'number of records in the vector DB: {collection.count_documents({})}')
 
-            print(f"Indexing done in {time.time() - cosmos_time} seconds COSMOS")
+            # print(f"Indexing done in {time.time() - cosmos_time} seconds COSMOS")
 
-            # # display all documents in the collection
-            # for doc in collection.find({}):
-            #     print(doc.get('_id'), doc.get('textContent')[0:40], doc.get('vectorContent')[0:5])
+            # # # display all documents in the collection
+            # # for doc in collection.find({}):
+            # #     print(doc.get('_id'), doc.get('textContent')[0:40], doc.get('vectorContent')[0:5])
 
-            # query the collection
-            query = "What is the history of the patient's medical diagnoses?"
+            # # query the collection
+            # query = "What is the history of the patient's medical diagnoses?"
 
-            # generate embeddings for the question
-            query_embeddings = create_embeddings_with_openai(query)
+            # # generate embeddings for the question
+            # query_embeddings = create_embeddings_with_openai(query)
 
-            # search for the question in the cosmos db
-            search_results = vector_search(query_embeddings, collection, max_number_of_results=5)
-            print(search_results)
+            # # search for the question in the cosmos db
+            # search_results = vector_search(query_embeddings, collection, max_number_of_results=5)
+            # # print(search_results)
 
-            # prepare the results for the openai prompt
-            result_json = []
+            # # prepare the results for the openai prompt
+            # result_json = []
 
-            # print each document in the result
-            # remove all empty values from the results json
-            search_results = [x for x in search_results if x]
-            for doc in search_results:
-                print(doc.get('_id'), doc.get('textContent'), doc.get('vectorContent')[0:5])
-                result_json.append(doc.get('textContent'))
+            # # print each document in the result
+            # # remove all empty values from the results json
+            # search_results = [x for x in search_results if x]
+            # for doc in search_results:
+            #     # print(doc.get('_id'), doc.get('textContent'), doc.get('vectorContent')[0:5])
+            #     result_json.append(doc.get('textContent'))
 
-            # create the prompt
-            prompt = create_tweet_prompt(query, result_json)
-            print(prompt)
+            # # create the prompt
+            # prompt = create_tweet_prompt(query, result_json)
+            # # print(prompt)
 
-            # generate the response
-            response = openai_request(prompt)
+            # # generate the response
+            # response = openai_request(prompt)
 
-            print(f'User question: {query}')
-            print(f'OpenAI response: {response}')
+            # print(f'User question: {query}')
+            # print(f'OpenAI response: {response}')
 
-            raise Exception("stop")
+            # raise Exception("stop")
 
         except Exception as e:
             message["status"] = "index creation failed"
