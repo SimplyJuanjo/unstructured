@@ -32,7 +32,8 @@ RUN python3.8 -m pip install pip==${PIP_VERSION} && \
   scl enable devtoolset-9 bash && \
   pip install --no-cache "detectron2@git+https://github.com/facebookresearch/detectron2.git@e2ce8dc#egg=detectron2" && \
   pip install --no-cache Flask==2.2.3 && \
-  pip install --no-cache langchain==0.0.173 && \
+  pip install --no-cache langchain==0.0.189 && \
+  pip install --no-cache pymongo && \
   pip install --no-cache pdfminer.six && \
   pip install --no-cache pinecone-client && \
   pip install --no-cache requests && \
@@ -50,6 +51,7 @@ RUN python3.8 -c "import nltk; nltk.download('punkt')" && \
   python3.8 -c "from unstructured.ingest.doc_processor.generalized import initialize; initialize()"
 
 COPY deepl_utils.py deepl_utils.py
+COPY cosmos_utils.py cosmos_utils.py
 COPY create_index.py create_index.py
 
 # Make port 80 available to the world outside this container
