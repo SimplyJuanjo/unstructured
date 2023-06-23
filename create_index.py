@@ -50,6 +50,25 @@ blob_service_client = BlobServiceClient.from_connection_string(connection_string
 subscription_key = '302b412fdec54f8595b3075c4e610754' # os.environ[key_var_name]
 region = 'northeurope' # os.environ[region_var_name]
 
+def call_analize_doc(container_name, url, document_id, filename, patient_id, user_id):
+    serverurl = os.getenv('SERVER_URL')
+    node_server_url = serverurl+'/api/analizeDoc'  # Replace with your node.js server URL
+    headers = {'Content-Type': 'application/json'}
+    payload = {
+        'containerName': container_name,
+        'url': url,
+        'documentId': document_id,
+        'filename': filename,
+        'patientId': patient_id,
+        'userId': user_id
+    }
+    # No need to handle the response
+    response = requests.post(node_server_url, data=json.dumps(payload), headers=headers)
+    if response.status_code == 200:
+        print('Request to Node.js server was successful.')
+    else:
+        print('Failed to make the request, status code: ', response.status_code)
+
 @app.route('/triggerCreateBook', methods=['POST'])
 def process_data():
     try:
@@ -57,7 +76,7 @@ def process_data():
         index_name = request.args.get('index')
         doc_id = request.args.get('doc_id')
         url = request.args.get('url')
-
+        container_name = request.args.get('containerName')
         endpoint = "https://raito.webpubsub.azure.com"
         key = "OVFdvxYDiWSBbQv03eVvq7P/yu5u5/pl7TYJ0pFs3ac="
         # Configura el cliente de Web PubSub
@@ -243,6 +262,10 @@ def process_data():
                 content_type="application/json"
             )
 
+        urlanalize_doc = request.args.get('urlanalizeDoc')
+        call_analize_doc(container_name, urlanalize_doc, doc_id, filename, index_name, user_id)
+        #service_client.send_to_all(message = {'from': user_id,'data': 'index created, let chat'})
+
         # TODO: match text lang from ms_detect_request to unstructured available languages
         # Extract the text from the PDF in high resolution
         unstructured_kwargs = {
@@ -339,15 +362,15 @@ def process_data():
             raise e
             
         else:
-            message["status"] = "index created, let chat"
+            message["status"] = "index improved"
             service_client.send_to_group(
                 user_id,
                 json.dumps(message),
                 content_type="application/json"
             )
+            
 
         os.remove(temp_file_path)
-
         # Convertir el diccionario en una cadena JSON
         response = {
             "msg": "done",
