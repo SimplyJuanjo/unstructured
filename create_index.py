@@ -15,16 +15,12 @@ from langchain.agents import AgentType
 from langchain.prompts.chat import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate, MessagesPlaceholder
 
 from deepl_utils import get_deepl_code, translate
-from cosmos_utils import setup_cosmos_connection, create_embeddings_with_openai, insert_requests, create_index, vector_search, openai_request, create_tweet_prompt
 
 import openai
-import logging
 import json
 import time
-from pprint import pprint
 import requests
 import tempfile
-from pymongo import MongoClient
 
 app = Flask(__name__)
 
@@ -35,13 +31,6 @@ pinecone_api_key = os.getenv('PINECONE_API_KEY')
 pinecone_environment = os.getenv('PINECONE_ENVIRONMENT')
 blobname = os.getenv('BLOBNAME')
 blobkey = os.getenv('BLOBKEY')
-
-# INDEX_NAME = "langchain-test-index"
-# NAMESPACE = "langchain_test_db.langchain_test_collection"
-# MONGO_CONNECTION_STRING = os.environ.get("MONGODB_ATLAS_URI")
-
-DB_NAME = "customgpt"
-COLLECTION_NAME = 'pdfcontent'
 
 pinecone.init(
     api_key=pinecone_api_key,
@@ -236,59 +225,6 @@ def process_data():
             print("Index created", vectorstore)
             print(f"Indexing done in {time.time() - pinecone_time} seconds PINECONE")
         
-        # try:
-            # collection, db = setup_cosmos_connection(DB_NAME, COLLECTION_NAME)
-
-            # # Delete the collection to reset the DB tests
-            # collection.delete_many({})
-
-            # cosmos_time = time.time()
-            # # Print the sliced records
-            # for i, record in enumerate(texts):
-            #     insert_requests(record.page_content, collection)
-
-            # create_index(collection, db, COLLECTION_NAME)
-
-            # print(f'number of records in the vector DB: {collection.count_documents({})}')
-
-            # print(f"Indexing done in {time.time() - cosmos_time} seconds COSMOS")
-
-            # # # display all documents in the collection
-            # # for doc in collection.find({}):
-            # #     print(doc.get('_id'), doc.get('textContent')[0:40], doc.get('vectorContent')[0:5])
-
-            # # query the collection
-            # query = "What is the history of the patient's medical diagnoses?"
-
-            # # generate embeddings for the question
-            # query_embeddings = create_embeddings_with_openai(query)
-
-            # # search for the question in the cosmos db
-            # search_results = vector_search(query_embeddings, collection, max_number_of_results=5)
-            # # print(search_results)
-
-            # # prepare the results for the openai prompt
-            # result_json = []
-
-            # # print each document in the result
-            # # remove all empty values from the results json
-            # search_results = [x for x in search_results if x]
-            # for doc in search_results:
-            #     # print(doc.get('_id'), doc.get('textContent'), doc.get('vectorContent')[0:5])
-            #     result_json.append(doc.get('textContent'))
-
-            # # create the prompt
-            # prompt = create_tweet_prompt(query, result_json)
-            # # print(prompt)
-
-            # # generate the response
-            # response = openai_request(prompt)
-
-            # print(f'User question: {query}')
-            # print(f'OpenAI response: {response}')
-
-            # raise Exception("stop")
-
         except Exception as e:
             message["status"] = "index creation failed"
             service_client.send_to_group(
@@ -432,12 +368,6 @@ def process_data():
             json.dumps(message2),
             content_type="application/json"
         )
-        # response = {
-        #     "msg": "error",
-        #     "error": str(e),
-        #     "status": 500,
-        # }
-        # json_response = json.dumps(response)
         raise e
 
 if __name__ == '__main__':
