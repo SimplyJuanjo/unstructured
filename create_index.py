@@ -109,7 +109,7 @@ def process_data():
 
         data_time_1 = time.time()
         print(f"Data 1 loaded in {data_time_1 - start_time} seconds")
-        print(data)
+        # print(data)
 
         translate_time = time.time()
         # To detect the language use only the first 500 characters
@@ -262,8 +262,6 @@ def process_data():
                 content_type="application/json"
             )
 
-        urlanalize_doc = request.args.get('urlanalizeDoc')
-        call_analize_doc(container_name, urlanalize_doc, doc_id, filename, index_name, user_id)
         #service_client.send_to_all(message = {'from': user_id,'data': 'index created, let chat'})
 
         # TODO: match text lang from ms_detect_request to unstructured available languages
@@ -278,7 +276,7 @@ def process_data():
 
         data_time = time.time()
         print(f"Data 2 loaded in {data_time - start_time} seconds")
-        print(data_2)
+        # print(data_2)
 
         result_name = f"{parts[4]}/{parts[5]}/{parts[6]}/{parts[7]}/{parts[8]}/extracted.txt"
         print(result_name)
@@ -322,12 +320,22 @@ def process_data():
         end_translate_time = time.time()
         print(f"Translation done in {end_translate_time - translate_time} seconds")
 
+        # Upload the translated PDF text
+        trans_ocr_result_name = f"{parts[4]}/{parts[5]}/{parts[6]}/{parts[7]}/{parts[8]}/extracted_translated.txt"
+        print(trans_ocr_result_name)
+        trans_ocr_block_blob_client = container_client.get_blob_client(trans_ocr_result_name)
+        trans_ocr_upload_blob_response = trans_ocr_block_blob_client.upload_blob(data=completed_translation)
+        print(trans_ocr_upload_blob_response)
+
         message["status"] = "hi_res extracted done"
         service_client.send_to_group(
             user_id,
             json.dumps(message),
             content_type="application/json"
         )
+
+        urlanalize_doc = request.args.get('urlanalizeDoc')
+        call_analize_doc(container_name, urlanalize_doc, doc_id, filename, index_name, user_id)
 
         # Process the PDF data
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
