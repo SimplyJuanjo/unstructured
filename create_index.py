@@ -1,6 +1,6 @@
 from flask import Flask, request, jsonify
 from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.vectorstores import Pinecone
+from langchain.vectorstores import Pinecone, AzureSearch
 from langchain.document_loaders import UnstructuredFileLoader, PDFMinerLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 import os
@@ -15,6 +15,9 @@ from langchain.agents import AgentType
 from langchain.prompts.chat import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate, MessagesPlaceholder
 
 from deepl_utils import get_deepl_code, translate
+import azure_utils
+
+from azure.search.documents.indexes import SearchIndexClient
 
 import openai
 import json
@@ -37,7 +40,8 @@ pinecone.init(
     environment=pinecone_environment,
 )
 
-# Initialize the OpenAIEmbeddings object with your credentials
+vector_store_address: str = 'https://nav29cogsearch.search.windows.net'
+vector_store_password: str = 'A2gqu2ARoytNqbLrYALTXOfCNS18RL894ebDx6iHhVAzSeDxlne1'
 
 BLOB = {
     "KEY" : blobkey,
@@ -83,7 +87,7 @@ def process_data():
         hub_name = "Hub"
         # Inicializar el cliente de Web PubSub
         service_client = WebPubSubServiceClient(endpoint=endpoint, credential=AzureKeyCredential(key), hub=hub_name)
-
+        index_client = SearchIndexClient(endpoint=vector_store_address, credential=AzureKeyCredential(vector_store_password))
         # Enviar notificación de estado
         user_id = request.args.get('userId')
         filename = request.args.get('filename')
@@ -243,6 +247,28 @@ def process_data():
             vectorstore = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, metadatas=metadatas)
             print("Index created", vectorstore)
             print(f"Indexing done in {time.time() - pinecone_time} seconds PINECONE")
+            # azure_time = time.time()
+            # active_indexes = index_client.list_indexes()
+            # if not index_name in active_indexes:
+            #     vector_store: AzureSearch = AzureSearch(
+            #         azure_search_endpoint=vector_store_address,
+            #         azure_search_key=vector_store_password,
+            #         index_name=index_name,
+            #         embedding_function=embeddings.embed_query,
+            #         fields=azure_utils.fields,
+            #     )
+            #     print("Index created", vector_store)
+            # else:
+            #     print("Index already exists")
+            #     vector_store = AzureSearch(index_name=index_name, search_type="hybrid", azure_search_endpoint=vector_store_address, azure_search_key=vector_store_password, embedding_function=embeddings.embed_query)
+
+            # vector_store.add_texts(
+            #     [t.page_content for t in texts],
+            #     metadatas,
+            # ) 
+            # # vector_store = AzureSearch.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, metadatas=metadatas,
+            # #                                       azure_search_endpoint=vector_store_address, azure_search_key=vector_store_password)
+            # print(f"Indexing done in {time.time() - azure_time} seconds Azure Search")
         
         except Exception as e:
             message["status"] = "index creation failed"
@@ -255,7 +281,7 @@ def process_data():
             raise e
             
         else:
-            message["status"] = "index created, let chat"
+            message["status"] = "index created, fast"
             service_client.send_to_group(
                 user_id,
                 json.dumps(message),
@@ -327,7 +353,7 @@ def process_data():
         trans_ocr_upload_blob_response = trans_ocr_block_blob_client.upload_blob(data=completed_translation)
         print(trans_ocr_upload_blob_response)
 
-        message["status"] = "hi_res extracted done"
+        message["status"] = "index created, let chat"
         service_client.send_to_group(
             user_id,
             json.dumps(message),
@@ -358,6 +384,28 @@ def process_data():
 
             vectorstore = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, metadatas=metadatas)
             print("Index created", vectorstore)
+            # azure_time = time.time()
+            # active_indexes = index_client.list_indexes()
+            # if not index_name in active_indexes:
+            #     vector_store: AzureSearch = AzureSearch(
+            #         azure_search_endpoint=vector_store_address,
+            #         azure_search_key=vector_store_password,
+            #         index_name=index_name,
+            #         embedding_function=embeddings.embed_query,
+            #         fields=azure_utils.FIELDS,
+            #     )
+            #     print("Index created", vector_store)
+            # else:
+            #     print("Index already exists")
+            #     vector_store = AzureSearch(index_name=index_name, search_type="hybrid", azure_search_endpoint=vector_store_address, azure_search_key=vector_store_password, embedding_function=embeddings.embed_query)
+
+            # vector_store.add_texts(
+            #     [t.page_content for t in texts],
+            #     metadatas,
+            # )
+            # # vector_store = AzureSearch.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, metadatas=metadatas,
+            # #                                       azure_search_endpoint=vector_store_address, azure_search_key=vector_store_password)
+            # print(f"Indexing 2 done in {time.time() - azure_time} seconds Azure Search")
             
         except Exception as e:
             message["status"] = "index creation failed"
