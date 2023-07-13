@@ -67,11 +67,7 @@ def call_analize_doc(container_name, url, document_id, filename, patient_id, use
         'userId': user_id
     }
     # No need to handle the response
-    response = requests.post(node_server_url, data=json.dumps(payload), headers=headers)
-    if response.status_code == 200:
-        print('Request to Node.js server was successful.')
-    else:
-        print('Failed to make the request, status code: ', response.status_code)
+    requests.post(node_server_url, data=json.dumps(payload), headers=headers)
 
 @app.route('/triggerCreateBook', methods=['POST'])
 def process_data():
