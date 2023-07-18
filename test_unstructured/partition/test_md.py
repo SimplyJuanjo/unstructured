@@ -5,7 +5,6 @@ from unittest.mock import patch
 import pytest
 import requests
 
-from unstructured.documents.elements import PageBreak
 from unstructured.partition.md import partition_md
 
 DIRECTORY = pathlib.Path(__file__).parent.resolve()
@@ -14,8 +13,19 @@ DIRECTORY = pathlib.Path(__file__).parent.resolve()
 def test_partition_md_from_filename():
     filename = os.path.join(DIRECTORY, "..", "..", "example-docs", "README.md")
     elements = partition_md(filename=filename)
-    assert PageBreak() not in elements
+    assert "PageBreak" not in [elem.category for elem in elements]
     assert len(elements) > 0
+    for element in elements:
+        assert element.metadata.filename == "README.md"
+
+
+def test_partition_md_from_filename_with_metadata_filename():
+    filename = os.path.join(DIRECTORY, "..", "..", "example-docs", "README.md")
+    elements = partition_md(filename=filename, metadata_filename="test")
+    assert "PageBreak" not in [elem.category for elem in elements]
+    assert len(elements) > 0
+    for element in elements:
+        assert element.metadata.filename == "test"
 
 
 def test_partition_md_from_file():
@@ -23,6 +33,16 @@ def test_partition_md_from_file():
     with open(filename) as f:
         elements = partition_md(file=f)
     assert len(elements) > 0
+    for element in elements:
+        assert element.metadata.filename is None
+
+
+def test_partition_md_from_file_with_metadata_filename():
+    filename = os.path.join(DIRECTORY, "..", "..", "example-docs", "README.md")
+    with open(filename) as f:
+        elements = partition_md(file=f, metadata_filename="test")
+    assert len(elements) > 0
+    assert all(element.metadata.filename == "test" for element in elements)
 
 
 def test_partition_md_from_text():
@@ -31,6 +51,8 @@ def test_partition_md_from_text():
         text = f.read()
     elements = partition_md(text=text)
     assert len(elements) > 0
+    for element in elements:
+        assert element.metadata.filename is None
 
 
 class MockResponse:
@@ -51,6 +73,8 @@ def test_partition_md_from_url():
         elements = partition_md(url="https://fake.url")
 
     assert len(elements) > 0
+    for element in elements:
+        assert element.metadata.filename is None
 
 
 def test_partition_md_from_url_raises_with_bad_status_code():
@@ -91,3 +115,27 @@ def test_partition_md_raises_with_too_many_specified():
 
     with pytest.raises(ValueError):
         partition_md(filename=filename, text=text)
+
+
+def test_partition_md_from_filename_exclude_metadata():
+    filename = os.path.join(DIRECTORY, "..", "..", "example-docs", "README.md")
+    elements = partition_md(filename=filename, include_metadata=False)
+    for i in range(len(elements)):
+        assert elements[i].metadata.to_dict() == {}
+
+
+def test_partition_md_from_file_exclude_metadata():
+    filename = os.path.join(DIRECTORY, "..", "..", "example-docs", "README.md")
+    with open(filename) as f:
+        elements = partition_md(file=f, include_metadata=False)
+    for i in range(len(elements)):
+        assert elements[i].metadata.to_dict() == {}
+
+
+def test_partition_md_from_text_exclude_metadata():
+    filename = os.path.join(DIRECTORY, "..", "..", "example-docs", "README.md")
+    with open(filename) as f:
+        text = f.read()
+    elements = partition_md(text=text, include_metadata=False)
+    for i in range(len(elements)):
+        assert elements[i].metadata.to_dict() == {}

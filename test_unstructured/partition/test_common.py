@@ -1,5 +1,6 @@
 from unstructured_inference.inference.layout import LayoutElement
 
+from unstructured.documents.coordinates import PixelSpace
 from unstructured.documents.elements import (
     CheckBox,
     FigureCaption,
@@ -15,10 +16,16 @@ def test_normalize_layout_element_dict():
     layout_element = {
         "type": "Title",
         "coordinates": [[1, 2], [3, 4], [5, 6], [7, 8]],
+        "coordinate_system": None,
         "text": "Some lovely text",
     }
-    element = common.normalize_layout_element(layout_element)
-    assert element == Title(text="Some lovely text", coordinates=[[1, 2], [3, 4], [5, 6], [7, 8]])
+    coordinate_system = PixelSpace(width=10, height=20)
+    element = common.normalize_layout_element(layout_element, coordinate_system=coordinate_system)
+    assert element == Title(
+        text="Some lovely text",
+        coordinates=[[1, 2], [3, 4], [5, 6], [7, 8]],
+        coordinate_system=coordinate_system,
+    )
 
 
 def test_normalize_layout_element_dict_caption():
@@ -27,10 +34,12 @@ def test_normalize_layout_element_dict_caption():
         "coordinates": [[1, 2], [3, 4], [5, 6], [7, 8]],
         "text": "Some lovely text",
     }
-    element = common.normalize_layout_element(layout_element)
+    coordinate_system = PixelSpace(width=10, height=20)
+    element = common.normalize_layout_element(layout_element, coordinate_system=coordinate_system)
     assert element == FigureCaption(
         text="Some lovely text",
         coordinates=[[1, 2], [3, 4], [5, 6], [7, 8]],
+        coordinate_system=coordinate_system,
     )
 
 
@@ -40,10 +49,12 @@ def test_normalize_layout_element_dict_figure_caption():
         "coordinates": [[1, 2], [3, 4], [5, 6], [7, 8]],
         "text": "Some lovely text",
     }
-    element = common.normalize_layout_element(layout_element)
+    coordinate_system = PixelSpace(width=10, height=20)
+    element = common.normalize_layout_element(layout_element, coordinate_system=coordinate_system)
     assert element == FigureCaption(
         text="Some lovely text",
         coordinates=[[1, 2], [3, 4], [5, 6], [7, 8]],
+        coordinate_system=coordinate_system,
     )
 
 
@@ -53,8 +64,13 @@ def test_normalize_layout_element_dict_misc():
         "coordinates": [[1, 2], [3, 4], [5, 6], [7, 8]],
         "text": "Some lovely text",
     }
-    element = common.normalize_layout_element(layout_element)
-    assert element == Text(text="Some lovely text", coordinates=[[1, 2], [3, 4], [5, 6], [7, 8]])
+    coordinate_system = PixelSpace(width=10, height=20)
+    element = common.normalize_layout_element(layout_element, coordinate_system=coordinate_system)
+    assert element == Text(
+        text="Some lovely text",
+        coordinates=[[1, 2], [3, 4], [5, 6], [7, 8]],
+        coordinate_system=coordinate_system,
+    )
 
 
 def test_normalize_layout_element_layout_element():
@@ -66,10 +82,12 @@ def test_normalize_layout_element_layout_element():
         y2=4,
         text="Some lovely text",
     )
-    element = common.normalize_layout_element(layout_element)
+    coordinate_system = PixelSpace(width=10, height=20)
+    element = common.normalize_layout_element(layout_element, coordinate_system=coordinate_system)
     assert element == NarrativeText(
         text="Some lovely text",
         coordinates=((1, 2), (1, 4), (3, 4), (3, 2)),
+        coordinate_system=coordinate_system,
     )
 
 
@@ -82,10 +100,12 @@ def test_normalize_layout_element_layout_element_narrative_text():
         y2=4,
         text="Some lovely text",
     )
-    element = common.normalize_layout_element(layout_element)
+    coordinate_system = PixelSpace(width=10, height=20)
+    element = common.normalize_layout_element(layout_element, coordinate_system=coordinate_system)
     assert element == NarrativeText(
         text="Some lovely text",
         coordinates=((1, 2), (1, 4), (3, 4), (3, 2)),
+        coordinate_system=coordinate_system,
     )
 
 
@@ -98,8 +118,13 @@ def test_normalize_layout_element_checked_box():
         y2=4,
         text="",
     )
-    element = common.normalize_layout_element(layout_element)
-    assert element == CheckBox(checked=True, coordinates=((1, 2), (1, 4), (3, 4), (3, 2)))
+    coordinate_system = PixelSpace(width=10, height=20)
+    element = common.normalize_layout_element(layout_element, coordinate_system=coordinate_system)
+    assert element == CheckBox(
+        checked=True,
+        coordinates=((1, 2), (1, 4), (3, 4), (3, 2)),
+        coordinate_system=coordinate_system,
+    )
 
 
 def test_normalize_layout_element_unchecked_box():
@@ -111,8 +136,13 @@ def test_normalize_layout_element_unchecked_box():
         y2=4,
         text="",
     )
-    element = common.normalize_layout_element(layout_element)
-    assert element == CheckBox(checked=False, coordinates=((1, 2), (1, 4), (3, 4), (3, 2)))
+    coordinate_system = PixelSpace(width=10, height=20)
+    element = common.normalize_layout_element(layout_element, coordinate_system=coordinate_system)
+    assert element == CheckBox(
+        checked=False,
+        coordinates=((1, 2), (1, 4), (3, 4), (3, 2)),
+        coordinate_system=coordinate_system,
+    )
 
 
 def test_normalize_layout_element_enumerated_list():
@@ -124,11 +154,24 @@ def test_normalize_layout_element_enumerated_list():
         y2=4,
         text="1. I'm so cool! 2. You're cool too. 3. We're all cool!",
     )
-    elements = common.normalize_layout_element(layout_element)
+    coordinate_system = PixelSpace(width=10, height=20)
+    elements = common.normalize_layout_element(layout_element, coordinate_system=coordinate_system)
     assert elements == [
-        ListItem(text="I'm so cool!", coordinates=((1, 2), (1, 4), (3, 4), (3, 2))),
-        ListItem(text="You're cool too.", coordinates=((1, 2), (1, 4), (3, 4), (3, 2))),
-        ListItem(text="We're all cool!", coordinates=((1, 2), (1, 4), (3, 4), (3, 2))),
+        ListItem(
+            text="I'm so cool!",
+            coordinates=((1, 2), (1, 4), (3, 4), (3, 2)),
+            coordinate_system=coordinate_system,
+        ),
+        ListItem(
+            text="You're cool too.",
+            coordinates=((1, 2), (1, 4), (3, 4), (3, 2)),
+            coordinate_system=coordinate_system,
+        ),
+        ListItem(
+            text="We're all cool!",
+            coordinates=((1, 2), (1, 4), (3, 4), (3, 2)),
+            coordinate_system=coordinate_system,
+        ),
     ]
 
 
@@ -141,9 +184,38 @@ def test_normalize_layout_element_bulleted_list():
         y2=4,
         text="* I'm so cool! * You're cool too. * We're all cool!",
     )
-    elements = common.normalize_layout_element(layout_element)
+    coordinate_system = PixelSpace(width=10, height=20)
+    elements = common.normalize_layout_element(layout_element, coordinate_system=coordinate_system)
     assert elements == [
-        ListItem(text="I'm so cool!", coordinates=((1, 2), (1, 4), (3, 4), (3, 2))),
-        ListItem(text="You're cool too.", coordinates=((1, 2), (1, 4), (3, 4), (3, 2))),
-        ListItem(text="We're all cool!", coordinates=((1, 2), (1, 4), (3, 4), (3, 2))),
+        ListItem(
+            text="I'm so cool!",
+            coordinates=((1, 2), (1, 4), (3, 4), (3, 2)),
+            coordinate_system=coordinate_system,
+        ),
+        ListItem(
+            text="You're cool too.",
+            coordinates=((1, 2), (1, 4), (3, 4), (3, 2)),
+            coordinate_system=coordinate_system,
+        ),
+        ListItem(
+            text="We're all cool!",
+            coordinates=((1, 2), (1, 4), (3, 4), (3, 2)),
+            coordinate_system=coordinate_system,
+        ),
     ]
+
+
+class MockPopenWithError:
+    def __init__(self, *args, **kwargs):
+        pass
+
+    def communicate(self):
+        return b"", b"an error occurred"
+
+
+def test_convert_office_doc_captures_errors(monkeypatch, caplog):
+    import subprocess
+
+    monkeypatch.setattr(subprocess, "Popen", MockPopenWithError)
+    common.convert_office_doc("no-real.docx", "fake-directory", target_format="docx")
+    assert "an error occurred" in caplog.text

@@ -3,7 +3,7 @@ import pathlib
 from unittest import mock
 
 import pytest
-import requests
+from PIL import Image
 from pytesseract import TesseractError
 from unstructured_inference.inference import layout
 
@@ -11,8 +11,6 @@ from unstructured.documents.elements import Title
 from unstructured.partition import image, pdf
 
 DIRECTORY = pathlib.Path(__file__).parent.resolve()
-
-is_in_docker = os.path.exists("/.dockerenv")
 
 
 class MockResponse:
@@ -53,8 +51,9 @@ def mock_successful_post(url, **kwargs):
 
 
 class MockPageLayout(layout.PageLayout):
-    def __init__(self, number: int):
-        pass
+    def __init__(self, number: int, image: Image):
+        self.number = number
+        self.image = image
 
     @property
     def elements(self):
@@ -74,33 +73,8 @@ class MockDocumentLayout(layout.DocumentLayout):
     @property
     def pages(self):
         return [
-            MockPageLayout(
-                number=0,
-            ),
+            MockPageLayout(number=0, image=Image.new("1", (1, 1))),
         ]
-
-
-def test_partition_image_api(monkeypatch, filename="example-docs/example.jpg"):
-    monkeypatch.setattr(requests, "post", mock_successful_post)
-    monkeypatch.setattr(requests, "get", mock_healthy_get)
-
-    partition_image_response = pdf._partition_via_api(filename)
-    assert partition_image_response[0]["type"] == "Title"
-    assert partition_image_response[0]["text"] == "Charlie Brown and the Great Pumpkin"
-    assert partition_image_response[1]["type"] == "Title"
-    assert partition_image_response[1]["text"] == "A Charlie Brown Christmas"
-
-
-def test_partition_image_api_page_break(monkeypatch, filename="example-docs/example.jpg"):
-    monkeypatch.setattr(requests, "post", mock_successful_post)
-    monkeypatch.setattr(requests, "get", mock_healthy_get)
-
-    partition_image_response = pdf._partition_via_api(filename, include_page_breaks=True)
-    assert partition_image_response[0]["type"] == "Title"
-    assert partition_image_response[0]["text"] == "Charlie Brown and the Great Pumpkin"
-    assert partition_image_response[1]["type"] == "PageBreak"
-    assert partition_image_response[2]["type"] == "Title"
-    assert partition_image_response[2]["text"] == "A Charlie Brown Christmas"
 
 
 @pytest.mark.parametrize(
@@ -127,43 +101,6 @@ def test_partition_image_local(monkeypatch, filename, file):
 def test_partition_image_local_raises_with_no_filename():
     with pytest.raises(FileNotFoundError):
         pdf._partition_pdf_or_image_local(filename="", file=None, is_image=True)
-
-
-def test_partition_image_api_raises_with_failed_healthcheck(
-    monkeypatch,
-    filename="example-docs/example.jpg",
-):
-    monkeypatch.setattr(requests, "post", mock_successful_post)
-    monkeypatch.setattr(requests, "get", mock_unhealthy_get)
-
-    with pytest.raises(ValueError):
-        pdf._partition_via_api(filename=filename, url="http://ml.unstructured.io/layout/image")
-
-
-def test_partition_image_api_raises_with_failed_api_call(
-    monkeypatch,
-    filename="example-docs/example.jpg",
-):
-    monkeypatch.setattr(requests, "post", mock_unsuccessful_post)
-    monkeypatch.setattr(requests, "get", mock_healthy_get)
-
-    with pytest.raises(ValueError):
-        pdf._partition_via_api(filename=filename, url="http://ml.unstructured.io/layout/image")
-
-
-@pytest.mark.parametrize(
-    ("url", "api_called", "local_called"),
-    [("fakeurl", True, False), (None, False, True)],
-)
-def test_partition_image(url, api_called, local_called):
-    with mock.patch.object(
-        pdf,
-        attribute="_partition_via_api",
-        new=mock.MagicMock(),
-    ), mock.patch.object(pdf, "_partition_pdf_or_image_local", mock.MagicMock()):
-        image.partition_image(filename="fake.pdf", strategy="hi_res", url=url)
-        assert pdf._partition_via_api.called == api_called
-        assert pdf._partition_pdf_or_image_local.called == local_called
 
 
 def test_partition_image_with_auto_strategy(filename="example-docs/layout-parser-paper-fast.jpg"):
@@ -193,7 +130,6 @@ def test_partition_image_raises_with_invalid_language(filename="example-docs/exa
         image.partition_image(filename=filename, strategy="hi_res", ocr_languages="fakeroo")
 
 
-@pytest.mark.skipif(is_in_docker, reason="Skipping this test in Docker container")
 def test_partition_image_with_ocr_detects_korean():
     filename = os.path.join(DIRECTORY, "..", "..", "example-docs", "english-and-korean.png")
     elements = image.partition_image(
@@ -206,7 +142,6 @@ def test_partition_image_with_ocr_detects_korean():
     assert elements[3].text.replace(" ", "").startswith("안녕하세요")
 
 
-@pytest.mark.skipif(is_in_docker, reason="Skipping this test in Docker container")
 def test_partition_image_with_ocr_detects_korean_from_file():
     filename = os.path.join(DIRECTORY, "..", "..", "example-docs", "english-and-korean.png")
 

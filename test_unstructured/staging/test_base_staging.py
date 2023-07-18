@@ -3,6 +3,7 @@ import json
 import os
 import pathlib
 import platform
+from tempfile import NamedTemporaryFile
 
 import pandas as pd
 import pytest
@@ -19,6 +20,8 @@ from unstructured.documents.elements import (
     Text,
     Title,
 )
+from unstructured.partition.email import partition_email
+from unstructured.partition.text import partition_text
 from unstructured.staging import base
 
 
@@ -44,6 +47,7 @@ def test_isd_to_elements():
         {"text": "Blurb2", "type": "Title"},
         {"text": "Blurb3", "type": "ListItem"},
         {"text": "Blurb4", "type": "BulletedText"},
+        {"text": "No Type"},
     ]
 
     elements = base.isd_to_elements(isd)
@@ -79,6 +83,25 @@ def test_convert_to_dataframe():
     assert df.text.equals(expected_df.text) is True
 
 
+def test_convert_to_dataframe_maintains_fields(
+    filename="example-docs/eml/fake-email-attachment.eml",
+):
+    elements = partition_email(
+        filename=filename,
+        process_attachements=True,
+        regex_metadata={"hello": r"Hello", "punc": r"[!]"},
+    )
+    df = base.convert_to_dataframe(elements)
+    for element in elements:
+        metadata = element.metadata.to_dict()
+        for key in metadata:
+            if not key.startswith("regex_metadata"):
+                assert key in df.columns
+
+    assert "regex_metadata_hello" in df.columns
+    assert "regex_metadata_punc" in df.columns
+
+
 @pytest.mark.skipif(
     platform.system() == "Windows",
     reason="Posix Paths are not available on Windows",
@@ -105,7 +128,7 @@ def test_all_elements_preserved_when_serialized():
         ListItem(text="list", metadata=metadata, element_id="6"),
         Image(text="image", metadata=metadata, element_id="7"),
         Text(text="text", metadata=metadata, element_id="8"),
-        PageBreak(),
+        PageBreak(text=""),
     ]
 
     isd = base.convert_to_isd(elements)
@@ -124,7 +147,7 @@ def test_serialized_deserialize_elements_to_json(tmpdir):
         ListItem(text="list", metadata=metadata, element_id="6"),
         Image(text="image", metadata=metadata, element_id="7"),
         Text(text="text", metadata=metadata, element_id="8"),
-        PageBreak(),
+        PageBreak(text=""),
     ]
 
     base.elements_to_json(elements, filename=filename)
@@ -134,3 +157,11 @@ def test_serialized_deserialize_elements_to_json(tmpdir):
     elements_str = base.elements_to_json(elements)
     new_elements_text = base.elements_from_json(text=elements_str)
     assert elements == new_elements_text
+
+
+def test_read_and_write_json_with_encoding(filename="example-docs/fake-text-utf-16-be.txt"):
+    elements = partition_text(filename=filename)
+    with NamedTemporaryFile() as tempfile:
+        base.elements_to_json(elements, filename=tempfile.name, encoding="utf-16")
+        new_elements_filename = base.elements_from_json(filename=tempfile.name, encoding="utf-16")
+    assert elements == new_elements_filename

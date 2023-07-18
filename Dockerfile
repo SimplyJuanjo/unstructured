@@ -1,8 +1,7 @@
 # syntax=docker/dockerfile:experimental
+FROM quay.io/unstructured-io/base-images:rocky8.7-3 as base
 
-FROM quay.io/unstructured-io/base-images:centos7.9
-
-ARG PIP_VERSION=23.1
+ARG PIP_VERSION
 
 # Set up environment
 ENV HOME /home/
@@ -12,10 +11,12 @@ RUN mkdir ${HOME}/.ssh && chmod go-rwx ${HOME}/.ssh \
 ENV PYTHONPATH="${PYTHONPATH}:${HOME}"
 ENV PATH="/home/usr/.local/bin:${PATH}"
 
+FROM base as deps
 # Copy and install Unstructured
 COPY requirements requirements
 
 RUN python3.8 -m pip install pip==${PIP_VERSION} && \
+  dnf -y groupinstall "Development Tools" && \
   pip install --no-cache -r requirements/base.txt && \
   pip install --no-cache -r requirements/test.txt && \
   pip install --no-cache -r requirements/huggingface.txt && \
@@ -29,8 +30,6 @@ RUN python3.8 -m pip install pip==${PIP_VERSION} && \
   pip install --no-cache -r requirements/ingest-slack.txt && \
   pip install --no-cache -r requirements/ingest-wikipedia.txt && \
   pip install --no-cache -r requirements/local-inference.txt && \
-  scl enable devtoolset-9 bash && \
-  pip install --no-cache "detectron2@git+https://github.com/facebookresearch/detectron2.git@e2ce8dc#egg=detectron2" && \
   pip install --no-cache Flask==2.2.3 && \
   pip install --no-cache langchain==0.0.219 && \
   pip install --no-cache pdfminer.six && \
@@ -41,14 +40,19 @@ RUN python3.8 -m pip install pip==${PIP_VERSION} && \
   pip install --no-cache azure-storage-blob azure-identity && \
   pip install --no-cache azure-messaging-webpubsubservice && \
   pip install --no-cache deepl && \
-  pip install --index-url=https://pkgs.dev.azure.com/azure-sdk/public/_packaging/azure-sdk-for-python/pypi/simple/ azure-search-documents==11.4.0a20230509004
+  pip install --index-url=https://pkgs.dev.azure.com/azure-sdk/public/_packaging/azure-sdk-for-python/pypi/simple/ azure-search-documents==11.4.0a20230509004 && \
+  dnf -y groupremove "Development Tools" && \
+  dnf clean all
+
+RUN python3.8 -c "import nltk; nltk.download('punkt')" && \
+  python3.8 -c "import nltk; nltk.download('averaged_perceptron_tagger')"
+
+FROM deps as code  
 
 COPY example-docs example-docs
 COPY unstructured unstructured
 
-RUN python3.8 -c "import nltk; nltk.download('punkt')" && \
-  python3.8 -c "import nltk; nltk.download('averaged_perceptron_tagger')" && \
-  python3.8 -c "from unstructured.ingest.doc_processor.generalized import initialize; initialize()"
+RUN python3.8 -c "from unstructured.ingest.doc_processor.generalized import initialize; initialize()"
 
 COPY deepl_utils.py deepl_utils.py
 COPY azure_utils.py azure_utils.py
@@ -60,3 +64,5 @@ EXPOSE 443
 
 CMD ["python3.8", "create_index.py"]
 # CMD ["/bin/bash"]
+
+

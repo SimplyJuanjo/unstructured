@@ -71,6 +71,8 @@ These element objects represent different components of the source document. Cur
 		* ``Address``
 		* ``Table``
 		* ``PageBreak``
+		* ``Header``
+		* ``Footer``
 	* ``CheckBox``
 	* ``Image``
 
@@ -78,7 +80,6 @@ These element objects represent different components of the source document. Cur
 Other element types that we will add in the future include tables and figures.
 Different partitioning functions use different methods for determining the element type and extracting the associated content.
 Document elements have a ``str`` representation. You can print them using the snippet below.
-
 
 
 .. code:: python
@@ -108,6 +109,43 @@ The following code shows how you can limit your output to only narrative text wi
 	        print("\n")
 
 
+######
+Tables
+######
+
+For ``Table`` elements, the raw text of the table will be stored in the ``text`` attribute for the Element, and HTML representation
+of the table will be available in the element metadata under ``element.metadata.text_as_html``. For most documents where
+table extraction is available, the ``partition`` function will extract tables automatically if they are present.
+For PDFs and images, table extraction requires a relatively expensive call to a table recognition model, and so for those
+document types table extraction is an option you need to enable. If you would like to extract tables for PDFs or images,
+pass in ``infer_table_structured=True``. Here is an example:
+
+.. code:: python
+
+    from unstructured.partition.pdf import partition_pdf
+
+    filename = "example-docs/layout-parser-paper.pdf"
+
+    elements = partition_pdf(filename=filename, infer_table_structure=True)
+    tables = [el for el in elements if el.category == "Table"]
+
+    print(tables[0].text)
+    print(tables[0].metadata.text_as_html)
+
+The text will look like this:
+
+
+.. code:: python
+
+	Dataset Base Model1 Large Model Notes PubLayNet [38] F / M M Layouts of modern scientific documents PRImA [3] M - Layouts of scanned modern magazines and scientific reports Newspaper [17] F - Layouts of scanned US newspapers from the 20th century TableBank [18] F F Table region on modern scientific and business document HJDataset [31] F / M - Layouts of history Japanese documents
+
+
+And the ``text_as_html`` metadata will look like this:
+
+.. code:: html
+
+	<table><thead><th>Dataset</th><th>| Base Model’</th><th>| Notes</th></thead><tr><td>PubLayNet</td><td>[38] F/M</td><td>Layouts of modern scientific documents</td></tr><tr><td>PRImA [3]</td><td>M</td><td>Layouts of scanned modern magazines and scientific reports</td></tr><tr><td>Newspaper</td><td>F</td><td>Layouts of scanned US newspapers from the 20th century</td></tr><tr><td>TableBank</td><td>F</td><td>Table region on modern scientific and business document</td></tr><tr><td>HJDataset [31]</td><td>F/M</td><td>Layouts of history Japanese documents</td></tr></table>
+
 ####################
 Serializing Elements
 ####################
@@ -134,7 +172,7 @@ serializing and deserializing an ``Element`` list.
 
     elements_to_json(elements, filename=filename)
     new_elements = elements_from_json(filename=filename)
-    
+
     # alternatively, one can also serialize/deserialize to/from a string with:
     serialized_elements_json = elements_to_json(elements)
     new_elements = elements_from_json(text=serialized_elements_json)

@@ -1,29 +1,46 @@
-import subprocess
-from io import BytesIO
-from tempfile import SpooledTemporaryFile
-from typing import BinaryIO, List, Optional, Tuple, Union
+from __future__ import annotations
 
+import subprocess
+from io import BufferedReader, BytesIO, TextIOWrapper
+from tempfile import SpooledTemporaryFile
+from typing import IO, TYPE_CHECKING, Any, BinaryIO, Dict, List, Optional, Tuple, Union
+
+from docx import table as docxtable
+from tabulate import tabulate
+
+from unstructured.documents.coordinates import CoordinateSystem
 from unstructured.documents.elements import (
     TYPE_TO_TEXT_ELEMENT_MAP,
     CheckBox,
+    CoordinatesMetadata,
     Element,
     ElementMetadata,
     ListItem,
     PageBreak,
     Text,
 )
+from unstructured.logger import logger
 from unstructured.nlp.patterns import ENUMERATED_BULLETS_RE, UNICODE_BULLETS_RE
 
+if TYPE_CHECKING:
+    from unstructured_inference.inference.layoutelement import (
+        LayoutElement,
+        LocationlessLayoutElement,
+    )
 
-def normalize_layout_element(layout_element) -> Union[Element, List[Element]]:
-    """Converts a list of unstructured_inference DocumentLayout objects to a list of
-    unstructured Elements."""
+
+def normalize_layout_element(
+    layout_element: Union["LayoutElement", "LocationlessLayoutElement", Element, Dict[str, Any]],
+    coordinate_system: Optional[CoordinateSystem] = None,
+) -> Union[Element, List[Element]]:
+    """Converts an unstructured_inference LayoutElement object to an unstructured Element."""
 
     if isinstance(layout_element, Element):
         return layout_element
 
+    # NOTE(alan): Won't the lines above ensure this never runs (PageBreak is a subclass of Element)?
     if isinstance(layout_element, PageBreak):
-        return PageBreak()
+        return PageBreak(text="")
 
     if not isinstance(layout_element, dict):
         layout_dict = layout_element.to_dict()
@@ -31,25 +48,35 @@ def normalize_layout_element(layout_element) -> Union[Element, List[Element]]:
         layout_dict = layout_element
 
     text = layout_dict.get("text")
+    # Both `coordinates` and `coordinate_system` must be present
+    # in order to add coordinates metadata to the element.
     coordinates = layout_dict.get("coordinates")
     element_type = layout_dict.get("type")
-
     if element_type == "List":
-        return layout_list_to_list_items(text, coordinates)
+        return layout_list_to_list_items(
+            text,
+            coordinates=coordinates,
+            coordinate_system=coordinate_system,
+        )
     elif element_type in TYPE_TO_TEXT_ELEMENT_MAP:
         _element_class = TYPE_TO_TEXT_ELEMENT_MAP[element_type]
-        return _element_class(text=text, coordinates=coordinates)
+        return _element_class(
+            text=text,
+            coordinates=coordinates,
+            coordinate_system=coordinate_system,
+        )
     elif element_type == "Checked":
-        return CheckBox(checked=True, coordinates=coordinates)
+        return CheckBox(checked=True, coordinates=coordinates, coordinate_system=coordinate_system)
     elif element_type == "Unchecked":
-        return CheckBox(checked=False, coordinates=coordinates)
+        return CheckBox(checked=False, coordinates=coordinates, coordinate_system=coordinate_system)
     else:
-        return Text(text=text, coordinates=coordinates)
+        return Text(text=text, coordinates=coordinates, coordinate_system=coordinate_system)
 
 
 def layout_list_to_list_items(
     text: str,
     coordinates: Tuple[Tuple[float, float], ...],
+    coordinate_system: Optional[CoordinateSystem],
 ) -> List[Element]:
     """Converts a list LayoutElement to a list of ListItem elements."""
     split_items = ENUMERATED_BULLETS_RE.split(text)
@@ -60,69 +87,119 @@ def layout_list_to_list_items(
     list_items: List[Element] = []
     for text_segment in split_items:
         if len(text_segment.strip()) > 0:
+            # Both `coordinates` and `coordinate_system` must be present
+            # in order to add coordinates metadata to the element.
             list_items.append(
-                ListItem(text=text_segment.strip(), coordinates=coordinates),
+                ListItem(
+                    text=text_segment.strip(),
+                    coordinates=coordinates,
+                    coordinate_system=coordinate_system,
+                ),
             )
 
     return list_items
 
 
 def _add_element_metadata(
-    layout_elements,
-    include_page_breaks: bool = False,
+    element: Element,
     filename: Optional[str] = None,
     filetype: Optional[str] = None,
+    page_number: Optional[int] = None,
     url: Optional[str] = None,
-) -> List[Element]:
+    text_as_html: Optional[str] = None,
+    coordinates: Optional[Tuple[Tuple[float, float], ...]] = None,
+    coordinate_system: Optional[CoordinateSystem] = None,
+) -> Element:
     """Adds document metadata to the document element. Document metadata includes information
     like the filename, source url, and page number."""
+    coordinates_metadata = (
+        CoordinatesMetadata(
+            points=coordinates,
+            system=coordinate_system,
+        )
+        if coordinates is not None and coordinate_system is not None
+        else None
+    )
+    metadata = ElementMetadata(
+        coordinates=coordinates_metadata,
+        filename=filename,
+        filetype=filetype,
+        page_number=page_number,
+        url=url,
+        text_as_html=text_as_html,
+    )
+    element.metadata = metadata.merge(element.metadata)
+    return element
+
+
+def _remove_element_metadata(
+    layout_elements,
+) -> List[Element]:
+    """Removes document metadata from the document element. Document metadata includes information
+    like the filename, source url, and page number."""
+    # Init an empty list of elements to write to
     elements: List[Element] = []
-    page_number: int = 1
+    metadata = ElementMetadata()
     for layout_element in layout_elements:
         element = normalize_layout_element(layout_element)
-        if hasattr(layout_element, "text_as_html"):
-            text_as_html: Optional[str] = layout_element.text_as_html
-        else:
-            text_as_html = None
-        metadata = ElementMetadata(
-            filename=filename,
-            filetype=filetype,
-            url=url,
-            page_number=page_number,
-            text_as_html=text_as_html,
-        )
         if isinstance(element, list):
             for _element in element:
-                _element.metadata = metadata.merge(_element.metadata)
+                _element.metadata = metadata
             elements.extend(element)
-        elif isinstance(element, PageBreak):
-            page_number += 1
-            if include_page_breaks:
-                elements.append(element)
         else:
-            element.metadata = metadata.merge(element.metadata)
+            element.metadata = metadata
             elements.append(element)
     return elements
 
 
-def convert_office_doc(input_filename: str, output_directory: str, target_format: str):
-    """Converts a .doc file to a .docx file using the libreoffice CLI."""
+def convert_office_doc(
+    input_filename: str,
+    output_directory: str,
+    target_format: str = "docx",
+    target_filter: Optional[str] = None,
+):
+    """Converts a .doc file to a .docx file using the libreoffice CLI.
+
+    Parameters
+    ----------
+    input_filename: str
+        The name of the .doc file to convert to .docx
+    output_directory: str
+        The output directory for the convert .docx file
+    target_format: str
+        The desired output format
+    target_filter: str
+        The output filter name to use when converting. See references below
+        for details.
+
+    References
+    ----------
+    https://stackoverflow.com/questions/52277264/convert-doc-to-docx-using-soffice-not-working
+    https://git.libreoffice.org/core/+/refs/heads/master/filter/source/config/fragments/filters
+
+    """
+    if target_filter is not None:
+        target_format = f"{target_format}:{target_filter}"
     # NOTE(robinson) - In the future can also include win32com client as a fallback for windows
     # users who do not have LibreOffice installed
     # ref: https://stackoverflow.com/questions/38468442/
     #       multiple-doc-to-docx-file-conversion-using-python
+    command = [
+        "soffice",
+        "--headless",
+        "--convert-to",
+        target_format,
+        "--outdir",
+        output_directory,
+        input_filename,
+    ]
     try:
-        subprocess.call(
-            [
-                "soffice",
-                "--headless",
-                "--convert-to",
-                target_format,
-                "--outdir",
-                output_directory,
-                input_filename,
-            ],
+        process = subprocess.Popen(
+            command,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
         )
+        output, error = process.communicate()
     except FileNotFoundError:
         raise FileNotFoundError(
             """soffice command was not found. Please install libreoffice
@@ -132,6 +209,10 @@ on your system and try again.
 - Mac: https://formulae.brew.sh/cask/libreoffice
 - Debian: https://wiki.debian.org/LibreOffice""",
         )
+
+    logger.info(output.decode().strip())
+    if error:
+        logger.error(error.decode().strip())
 
 
 def exactly_one(**kwargs) -> None:
@@ -160,3 +241,42 @@ def spooled_to_bytes_io_if_needed(
     else:
         # Return the original file object if it's not a SpooledTemporaryFile
         return file_obj
+
+
+def convert_to_bytes(
+    file: Optional[Union[bytes, SpooledTemporaryFile, IO[bytes]]] = None,
+) -> bytes:
+    if isinstance(file, bytes):
+        f_bytes = file
+    elif isinstance(file, SpooledTemporaryFile):
+        file.seek(0)
+        f_bytes = file.read()
+        file.seek(0)
+    elif isinstance(file, BytesIO):
+        f_bytes = file.getvalue()
+    elif isinstance(file, (TextIOWrapper, BufferedReader)):
+        with open(file.name, "rb") as f:
+            f_bytes = f.read()
+    else:
+        raise ValueError("Invalid file-like object type")
+
+    return f_bytes
+
+
+def convert_ms_office_table_to_text(table: docxtable.Table, as_html: bool = True):
+    """
+    Convert a table object from a Word document to an HTML table string using the tabulate library.
+
+    Args:
+        table (Table): A Table object.
+        as_html (bool): Whether to return the table as an HTML string (True) or a
+            plain text string (False)
+
+    Returns:
+        str: An table string representation of the input table.
+    """
+    fmt = "html" if as_html else "plain"
+    rows = list(table.rows)
+    headers = [cell.text for cell in rows[0].cells]
+    data = [[cell.text for cell in row.cells] for row in rows[1:]]
+    return tabulate(data, headers=headers, tablefmt=fmt)

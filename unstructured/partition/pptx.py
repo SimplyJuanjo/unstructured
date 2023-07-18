@@ -9,11 +9,17 @@ from unstructured.documents.elements import (
     ListItem,
     NarrativeText,
     PageBreak,
+    Table,
     Text,
     Title,
+    process_metadata,
 )
 from unstructured.file_utils.filetype import FileType, add_metadata_with_filetype
-from unstructured.partition.common import exactly_one, spooled_to_bytes_io_if_needed
+from unstructured.partition.common import (
+    convert_ms_office_table_to_text,
+    exactly_one,
+    spooled_to_bytes_io_if_needed,
+)
 from unstructured.partition.text_type import (
     is_possible_narrative_text,
     is_possible_title,
@@ -22,18 +28,22 @@ from unstructured.partition.text_type import (
 OPENXML_SCHEMA_NAME = "{http://schemas.openxmlformats.org/drawingml/2006/main}"
 
 
+@process_metadata()
 @add_metadata_with_filetype(FileType.PPTX)
 def partition_pptx(
     filename: Optional[str] = None,
-    file: Optional[Union[IO, SpooledTemporaryFile]] = None,
+    file: Optional[Union[IO[bytes], SpooledTemporaryFile]] = None,
     include_page_breaks: bool = True,
     metadata_filename: Optional[str] = None,
+    include_metadata: bool = True,
+    include_slide_notes: bool = False,
+    **kwargs,
 ) -> List[Element]:
     """Partitions Microsoft PowerPoint Documents in .pptx format into its document elements.
 
     Parameters
     ----------
-     filename
+    filename
         A string defining the target filename path.
     file
         A file-like object using "rb" mode --> open(filename, "rb").
@@ -43,6 +53,8 @@ def partition_pptx(
         The filename to use for the metadata. Relevant because partition_ppt converts the
         document .pptx before partition. We want the original source filename in the
         metadata.
+    include_slide_notes
+        If True, includes the slide notes as element
     """
 
     # Verify that only one of the arguments was provided
@@ -56,21 +68,37 @@ def partition_pptx(
         )
 
     elements: List[Element] = []
-    metadata_filename = metadata_filename or filename
-    metadata = ElementMetadata(filename=metadata_filename)
+    metadata = ElementMetadata(filename=metadata_filename or filename)
     num_slides = len(presentation.slides)
     for i, slide in enumerate(presentation.slides):
+        metadata = ElementMetadata.from_dict(metadata.to_dict())
         metadata.page_number = i + 1
+        if include_slide_notes and slide.has_notes_slide is True:
+            notes_slide = slide.notes_slide
+            if notes_slide.notes_text_frame is not None:
+                notes_text_frame = notes_slide.notes_text_frame
+                notes_text = notes_text_frame.text
+                if notes_text.strip() != "":
+                    elements.append(NarrativeText(text=notes_text, metadata=metadata))
 
         for shape in _order_shapes(slide.shapes):
-            # NOTE(robinson) - we don't deal with tables yet, but so future humans can find
-            # it again, here are docs on how to deal with tables. The check for tables should
-            # be `if shape.has_table`
-            # ref: https://python-pptx.readthedocs.io/en/latest/user/table.html#adding-a-table
+            if shape.has_table:
+                table: pptx.table.Table = shape.table
+                html_table = convert_ms_office_table_to_text(table, as_html=True)
+                text_table = convert_ms_office_table_to_text(table, as_html=False)
+                if (text_table := text_table.strip()) != "":
+                    metadata = ElementMetadata(
+                        filename=metadata_filename or filename,
+                        text_as_html=html_table,
+                        page_number=metadata.page_number,
+                    )
+                    elements.append(Table(text=text_table, metadata=metadata))
+                continue
             if not shape.has_text_frame:
                 continue
             # NOTE(robinson) - avoid processing shapes that are not on the actual slide
-            if shape.top < 0 or shape.left < 0:
+            # NOTE - skip check if no top or left position (shape displayed top left)
+            if (shape.top and shape.left) and (shape.top < 0 or shape.left < 0):
                 continue
             for paragraph in shape.text_frame.paragraphs:
                 text = paragraph.text
@@ -86,14 +114,14 @@ def partition_pptx(
                     elements.append(Text(text=text, metadata=metadata))
 
         if include_page_breaks and i < num_slides - 1:
-            elements.append(PageBreak())
+            elements.append(PageBreak(text=""))
 
     return elements
 
 
 def _order_shapes(shapes):
     """Orders the shapes from top to bottom and left to right."""
-    return sorted(shapes, key=lambda x: (x.top, x.left))
+    return sorted(shapes, key=lambda x: (x.top or 0, x.left or 0))
 
 
 def _is_bulleted_paragraph(paragraph) -> bool:

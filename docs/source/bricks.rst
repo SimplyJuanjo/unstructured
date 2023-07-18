@@ -74,7 +74,6 @@ Below we see an example of how to partition a document directly with the URL usi
   print("\n\n".join([str(el) for el in elements]))
 
 
-
 ``partition``
 --------------
 
@@ -83,7 +82,7 @@ If you call the ``partition`` function, ``unstructured`` will attempt to detect 
 file type and route it to the appropriate partitioning brick. All partitioning bricks
 called within ``partition`` are called using the default kwargs. Use the document-type
 specific bricks if you need to apply non-default settings.
-``partition`` currently supports ``.docx``, ``.doc``, ``.odt``, ``.pptx``, ``.ppt``, ``.xlsx``, ``.csv``, ``.eml``, ``.msg``, ``.rtf``, ``.epub``, ``.html``, ``.xml``, ``.pdf``,
+``partition`` currently supports ``.docx``, ``.doc``, ``.odt``, ``.pptx``, ``.ppt``, ``.xlsx``, ``.csv``, ``.tsv``, ``.eml``, ``.msg``, ``.rtf``, ``.epub``, ``.html``, ``.xml``, ``.pdf``,
 ``.png``, ``.jpg``, and ``.txt`` files.
 If you set the ``include_page_breaks`` kwarg to ``True``, the output will include page breaks. This is only supported for ``.pptx``, ``.html``, ``.pdf``,
 ``.png``, and ``.jpg``.
@@ -132,73 +131,49 @@ to disable SSL verification in the request.
   elements = partition(url=url)
   elements = partition(url=url, content_type="text/markdown")
 
+For more information about the ``partition`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/main/unstructured/partition/auto.py>`_.
 
-``partition_via_api``
----------------------
 
-``partition_via_api`` allows users to partition documents using the hosted Unstructured API.
-The API partitions documents using the automatic ``partition`` function. Currently, the API
-supports all filetypes except for RTF and EPUBs.
-To use another URL for the API use the ``api_url`` kwarg. This is helpful if you're hosting
-the API yourself or running it locally through a container. You can pass in your API key
-using the ``api_key`` kwarg. You can use the ``content_type`` kwarg to pass in the MIME
-type for the file. If you do not explicitly pass it, the MIME type will be inferred.
+``partition_csv``
+------------------
 
-See `here <https://api.unstructured.io/general/docs>`_ for the hosted API swagger documentation
-and `here <https://github.com/Unstructured-IO/unstructured-api#dizzy-instructions-for-using-the-docker-image>`_ for
-documentation on how to run the API as a container locally.
+The ``partition_csv`` function pre-processes CSV files. The output is a single
+``Table`` element. The ``text_as_html`` attribute in the element metadata will
+contain an HTML representation of the table.
 
 Examples:
 
 .. code:: python
 
-  from unstructured.partition.api import partition_via_api
+  from unstructured.partition.csv import partition_csv
 
-  filename = "example-docs/fake-email.eml"
+  elements = partition_csv(filename="example-docs/stanley-cups.csv")
+  print(elements[0].metadata.text_as_html)
 
-  elements = partition_via_api(filename=filename, api_key="MY_API_KEY", content_type="message/rfc822")
-
-  with open(filename, "rb") as f:
-    elements = partition_via_api(file=f, file_filename=filename, api_key="MY_API_KEY")
+For more information about the ``partition_csv`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/main/unstructured/partition/csv.py>`_.
 
 
-``partition_multiple_via_api``
-------------------------------
+``partition_doc``
+------------------
 
-``partition_multiple_via_api`` is similar to ``partition_via_api``, but allows you to partition
-multiple documents in a single REST API call. The result has the type ``List[List[Element]]``,
-for example:
-
-.. code:: python
-
-  [
-    [NarrativeText("Narrative!"), Title("Title!")],
-    [NarrativeText("Narrative!"), Title("Title!")]
-  ]
+The ``partition_doc`` partitioning brick pre-processes Microsoft Word documents
+saved in the ``.doc`` format. This partition brick uses a combination of the styling
+information in the document and the structure of the text to determine the type
+of a text element. The ``partition_doc`` can take a filename or file-like object
+as input.
+``partiton_doc`` uses ``libreoffice`` to convert the file to ``.docx`` and then
+calls ``partition_docx``. Ensure you have ``libreoffice`` installed
+before using ``partition_doc``.
 
 Examples:
 
 .. code:: python
 
-  from unstructured.partition.api import partition_multiple_via_api
+  from unstructured.partition.doc import partition_doc
 
-  filenames = ["example-docs/fake-email.eml", "example-docs/fake.docx"]
+  elements = partition_doc(filename="example-docs/fake.doc")
 
-  documents = partition_multiple_via_api(filenames=filenames)
-
-
-.. code:: python
-
-  from contextlib import ExitStack
-
-  from unstructured.partition.api import partition_multiple_via_api
-
-  filenames = ["example-docs/fake-email.eml", "example-docs/fake.docx"]
-  files = [open(filename, "rb") for filename in filenames]
-
-  with ExitStack() as stack:
-      files = [stack.enter_context(open(filename, "rb")) for filename in filenames]
-      documents = partition_multiple_via_api(files=files, file_filenames=filenames)
+For more information about the ``partition_doc`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/main/unstructured/partition/doc.py>`_.
 
 
 ``partition_docx``
@@ -229,118 +204,103 @@ Examples:
   with open("mydoc.docx", "rb") as f:
       elements = partition_docx(file=f)
 
+In Word documents, headers and footers are specified per section. In the output,
+the ``Header`` elements will appear at the beginning of a section and ``Footer``
+elements will appear at the end. MSFT Word headers and footers have a ``header_footer_type``
+metadata field indicating where the header or footer applies. Valid values are
+``"primary"``, ``"first_page"`` and ``"even_page"``.
 
-``partition_doc``
-------------------
+``partition_docx`` will include page numbers in the document metadata when page breaks
+are present in the document. The function will detect user inserted page breaks
+and page breaks inserted by the Word document renderer. Some (but not all) Word document renderers
+insert page breaks when you save the document. If your Word document renderer does not do that,
+you may not see page numbers in the output even if you see them visually when you open the
+document. If that is the case, you can try saving the document with a different renderer.
 
-The ``partition_doc`` partitioning brick pre-processes Microsoft Word documents
-saved in the ``.doc`` format. This partition brick uses a combination of the styling
-information in the document and the structure of the text to determine the type
-of a text element. The ``partition_doc`` can take a filename or file-like object
-as input.
-``partiton_doc`` uses ``libreoffice`` to convert the file to ``.docx`` and then
-calls ``partition_docx``. Ensure you have ``libreoffice`` installed
-before using ``partition_doc``.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.partition.doc import partition_doc
-
-  elements = partition_doc(filename="example-docs/fake.doc")
+For more information about the ``partition_docx`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/main/unstructured/partition/docx.py>`_.
 
 
-``partition_xlsx``
-------------------
-
-The ``partition_xlsx`` function pre-processes Microsoft Excel documents. Each
-sheet in the Excel file will be stored as a ``Table`` object. The plain text
-of the sheet will be the ``text`` attribute of the ``Table``. The ``text_as_html``
-attribute in the element metadata will contain an HTML representation of the table.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.partition.xlsx import partition_xlsx
-
-  elements = partition_xlsx(filename="example-docs/stanley-cups.xlsx")
-  print(elements[0].metadata.text_as_html)
-
-
-``partition_csv``
-------------------
-
-The ``partition_csv`` function pre-processes CSV files. The output is a single
-``Table`` element. The ``text_as_html`` attribute in the element metadata will
-contain an HTML representation of the table.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.partition.csv import partition_csv
-
-  elements = partition_csv(filename="example-docs/stanley-cups.csv")
-  print(elements[0].metadata.text_as_html)
-
-
-``partition_odt``
-------------------
-
-The ``partition_odt`` partitioning brick pre-processes Open Office documents
-saved in the ``.odt`` format. The function first converts the document
-to ``.docx`` using ``pandoc`` and then processes it using ``partition_docx``.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.partition.odt import partition_odt
-
-  elements = partition_odt(filename="example-docs/fake.odt")
-
-
-``partition_pptx``
+``partition_email``
 ---------------------
 
-The ``partition_pptx`` partitioning brick pre-processes Microsoft PowerPoint documents
-saved in the ``.pptx`` format. This partition brick uses a combination of the styling
-information in the document and the structure of the text to determine the type
-of a text element. The ``partition_pptx`` can take a filename or file-like object
-as input, as shown in the two examples below.
+The ``partition_email`` function partitions ``.eml`` documents and works with exports
+from email clients such as Microsoft Outlook and Gmail. The ``partition_email``
+takes a filename, file-like object, or raw text as input and produces a list of
+document ``Element`` objects as output. Also ``content_source`` can be set to ``text/html``
+(default) or ``text/plain`` to process the html or plain text version of the email, respectively.
+In order for ``partition_email`` to also return the header information (e.g. sender, recipient,
+attachment, etc.), ``include_headers`` must be set to ``True``. Returns tuple with body elements
+first and header elements second, if ``include_headers`` is True.
 
 Examples:
 
 .. code:: python
 
-  from unstructured.partition.pptx import partition_pptx
+  from unstructured.partition.email import partition_email
 
-  elements = partition_pptx(filename="example-docs/fake-power-point.pptx")
+  elements = partition_email(filename="example-docs/fake-email.eml")
 
-  with open("example-docs/fake-power-point.pptx", "rb") as f:
-      elements = partition_pptx(file=f)
+  with open("example-docs/fake-email.eml", "r") as f:
+      elements = partition_email(file=f)
+
+  with open("example-docs/fake-email.eml", "r") as f:
+      text = f.read()
+  elements = partition_email(text=text)
+
+  with open("example-docs/fake-email.eml", "r") as f:
+      text = f.read()
+  elements = partition_email(text=text, content_source="text/plain")
+
+  with open("example-docs/fake-email.eml", "r") as f:
+      text = f.read()
+  elements = partition_email(text=text, include_headers=True)
 
 
-``partition_ppt``
+``partition_email`` includes a ``max_partition`` parameter that indicates the maximum character
+length for a document element.
+This parameter only applies if ``"text/plain"`` is selected as the ``content_source``.
+The default value is ``1500``, which roughly corresponds to
+the average character length for a paragraph.
+You can disable ``max_partition`` by setting it to ``None``.
+
+
+You can optionally partition e-mail attachments by setting ``process_attachments=True``.
+If you set ``process_attachments=True``, you'll also need to pass in a partitioning
+function to ``attachment_partitioner``. The following is an example of what the
+workflow looks like:
+
+.. code:: python
+
+  from unstructured.partition.auto import partition
+  from unstructured.partition.email import partition_email
+
+  filename = "example-docs/eml/fake-email-attachment.eml"
+  elements = partition_email(
+    filename=filename, process_attachments=True, attachment_partitioner=partition
+  )
+
+For more information about the ``partition_email`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/email.py>`_.
+
+
+``partition_epub``
 ---------------------
 
-The ``partition_ppt`` partitioning brick pre-processes Microsoft PowerPoint documents
-saved in the ``.ppt`` format. This partition brick uses a combination of the styling
-information in the document and the structure of the text to determine the type
-of a text element. The ``partition_ppt`` can take a filename or file-like object.
-``partition_ppt`` uses ``libreoffice`` to convert the file to ``.pptx`` and then
-calls ``partition_pptx``. Ensure you have ``libreoffice`` installed
-before using ``partition_ppt``.
+The ``partition_epub`` function processes e-books in EPUB3 format. The function
+first converts the document to HTML using ``pandocs`` and then calls ``partition_html``.
+You'll need `pandocs <https://pandoc.org/installing.html>`_ installed on your system
+to use ``partition_epub``.
+
 
 Examples:
 
 .. code:: python
 
-  from unstructured.partition.ppt import partition_ppt
+  from unstructured.partition.epub import partition_epub
 
-  elements = partition_ppt(filename="example-docs/fake-power-point.ppt")
+  elements = partition_epub(filename="example-docs/winter-sports.epub")
+
+For more information about the ``partition_epub`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/epub.py>`_.
+
 
 ``partition_html``
 ---------------------
@@ -388,95 +348,15 @@ to disable SSL verification in the request.
   elements = partition_html(url="https://python.org/", ssl_verify=False)
 
 
-``partition_xml``
------------------
 
-The ``partition_xml`` function processes XML documents.
-If ``xml_keep_tags=False``, the function only returns the text attributes from the tags.
-You can use ``xml_path`` in conjuntion with ``xml_keep_tags=False`` to restrict the text
-extraction to specific tags.
-If ``xml_keep_tags=True``, the function returns tag information in addition to tag text.
-``xml_keep_tags`` is ``False`` be default.
+If you website contains news articles, it can be helpful to only grab content that appears in
+between the ``<article>`` tags, if the site uses that convention.
+To activate this behavior, you can set ``html_assemble_articles=True``.
+If ``html_assemble_articles`` is ``True``, each ``<article>`` tag will be treated as a a page.
+If ``html_assemble_articles`` is ``True`` and no ``<article>`` tags are present, the behavior
+is the same as ``html_assemble_articles=False``.
 
-
-.. code:: python
-
-  from unstructured.partition.xml import partition_xml
-
-  elements = partition_xml(filename="example-docs/factbook.xml", xml_keep_tags=True)
-
-  elements = partition_xml(filename="example-docs/factbook.xml", xml_keep_tags=False)
-
-
-
-``partition_pdf``
----------------------
-
-The ``partition_pdf`` function segments a PDF document by using a document image analysis model.
-If you set ``url=None``, the document image analysis model will execute locally. You need to install ``unstructured[local-inference]``
-if you'd like to run inference locally.
-If you set the URL, ``partition_pdf`` will make a call to a remote inference server.
-``partition_pdf`` also includes a ``token`` function that allows you to pass in an authentication
-token for a remote API call.
-
-You can also specify what languages to use for OCR with the ``ocr_languages`` kwarg. For example,
-use ``ocr_languages="eng+deu"`` to use the English and German language packs. See the
-`Tesseract documentation <https://github.com/tesseract-ocr/tessdata>`_ for a full list of languages and
-install instructions. OCR is only applied if the text is not already available in the PDF document.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.partition.pdf import partition_pdf
-
-  # Returns a List[Element] present in the pages of the parsed pdf document
-  elements = partition_pdf("example-docs/layout-parser-paper-fast.pdf")
-
-  # Applies the English and Swedish language pack for ocr. OCR is only applied
-  # if the text is not available in the PDF.
-  elements = partition_pdf("example-docs/layout-parser-paper-fast.pdf", ocr_languages="eng+swe")
-
-
-The ``strategy`` kwarg controls the method that will be used to process the PDF.
-The available strategies for PDFs are ``"auto"``, ``"hi_res"``, ``"ocr_only"``, and ``"fast"``.
-
-The ``"auto"`` strategy will choose the partitioning strategy based on document characteristics and the function kwargs.
-If ``infer_table_structure`` is passed, the strategy will be ``"hi_res"`` because that is the only strategy that
-currently extracts tables for PDFs. Otherwise, ``"auto"`` will choose ``"fast"`` if the PDF text is extractable and
-``"ocr_only"`` otherwise. ``"auto"`` is the default strategy.
-
-The ``"hi_res"`` strategy will identify the layout of the document using ``detectron2``. The advantage of `"hi_res"` is that
-it uses the document layout to gain additional information about document elements. We recommend using this strategy
-if your use case is highly sensitive to correct classifications for document elements. If ``detectron2`` is not available,
-the ``"hi_res"`` strategy will fall back to the ``"ocr_only"`` strategy.
-
-The ``"ocr_only"`` strategy runs the document through Tesseract for OCR and then runs the raw text through ``partition_text``.
-Currently, ``"hi_res"`` has difficulty ordering elements for documents with multiple columns. If you have a document with
-multiple columns that does not have extractable text, we recommend using the ``"ocr_only"`` strategy. ``"ocr_only"`` falls
-back to ``"fast"`` if Tesseract is not available and the document has extractable text.
-
-The ``"fast"`` strategy will extract the text using ``pdfminer`` and process the raw text with ``partition_text``.
-If the PDF text is not extractable, ``partition_pdf`` will fall back to ``"ocr_only"``. We recommend using the
-``"fast"`` strategy in most cases where the PDF has extractable text.
-
-If a PDF is copy protected, ``partition_pdf`` can process the document with the ``"hi_res"`` strategy (which
-will treat it like an image), but cannot process the document with the ``"fast"`` strategy. 
-If the user chooses ``"fast"`` on a copy protected PDF, ``partition_pdf`` will fall back to the ``"hi_res"``
-strategy. If ``detectron2`` is not installed, ``partition_pdf`` will fail for copy protected
-PDFs because the document will not be processable by any of the available methods.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.partition.pdf import partition_pdf
-
-  # This will process without issue
-  elements = partition_pdf("example-docs/copy-protected.pdf", strategy="hi_res")
-
-  # This will output a warning and fall back to hi_res
-  elements = partition_pdf("example-docs/copy-protected.pdf", strategy="fast")
+For more information about the ``partition_html`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/html.py>`_.
 
 
 ``partition_image``
@@ -533,41 +413,25 @@ have the Korean language pack for Tesseract installed on your system.
   filename = "example-docs/english-and-korean.png"
   elements = partition_image(filename=filename, ocr_languages="eng+kor", strategy="ocr_only")
 
+For more information about the ``partition_image`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/image.py>`_.
 
-``partition_email``
+
+``partition_md``
 ---------------------
 
-The ``partition_email`` function partitions ``.eml`` documents and works with exports
-from email clients such as Microsoft Outlook and Gmail. The ``partition_email``
-takes a filename, file-like object, or raw text as input and produces a list of
-document ``Element`` objects as output. Also ``content_source`` can be set to ``text/html``
-(default) or ``text/plain`` to process the html or plain text version of the email, respectively.
-In order for ``partition_email`` to also return the header information (e.g. sender, recipient,
-attachment, etc.), ``include_headers`` must be set to ``True``. Returns tuple with body elements
-first and header elements second, if ``include_headers`` is True.
+The ``partition_md`` function provides the ability to parse markdown files. The
+following workflow shows how to use ``partition_md``.
+
 
 Examples:
 
 .. code:: python
 
-  from unstructured.partition.email import partition_email
+  from unstructured.partition.md import partition_md
 
-  elements = partition_email(filename="example-docs/fake-email.eml")
+  elements = partition_md(filename="README.md")
 
-  with open("example-docs/fake-email.eml", "r") as f:
-      elements = partition_email(file=f)
-
-  with open("example-docs/fake-email.eml", "r") as f:
-      text = f.read()
-  elements = partition_email(text=text)
-
-  with open("example-docs/fake-email.eml", "r") as f:
-      text = f.read()
-  elements = partition_email(text=text, content_source="text/plain")
-
-  with open("example-docs/fake-email.eml", "r") as f:
-      text = f.read()
-  elements = partition_email(text=text, include_headers=True)
+For more information about the ``partition_md`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/md.py>`_.
 
 
 ``partition_msg``
@@ -584,23 +448,254 @@ Examples:
 
   elements = partition_msg(filename="example-docs/fake-email.msg")
 
+``partition_msg`` includes a ``max_partition`` parameter that indicates the maximum character
+length for a document element.
+This parameter only applies if ``"text/plain"`` is selected as the ``content_source``.
+The default value is ``1500``, which roughly corresponds to
+the average character length for a paragraph.
+You can disable ``max_partition`` by setting it to ``None``.
 
-``partition_epub``
+
+You can optionally partition e-mail attachments by setting ``process_attachments=True``.
+If you set ``process_attachments=True``, you'll also need to pass in a partitioning
+function to ``attachment_partitioner``. The following is an example of what the
+workflow looks like:
+
+.. code:: python
+
+  from unstructured.partition.auto import partition
+  from unstructured.partition.msg import partition_msg
+
+  filename = "example-docs/fake-email-attachment.msg"
+  elements = partition_msg(
+    filename=filename, process_attachments=True, attachment_partitioner=partition
+  )
+
+For more information about the ``partition_msg`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/msg.py>`_.
+
+
+``partition_multiple_via_api``
+------------------------------
+
+``partition_multiple_via_api`` is similar to ``partition_via_api``, but allows you to partition
+multiple documents in a single REST API call. The result has the type ``List[List[Element]]``,
+for example:
+
+.. code:: python
+
+  [
+    [NarrativeText("Narrative!"), Title("Title!")],
+    [NarrativeText("Narrative!"), Title("Title!")]
+  ]
+
+Examples:
+
+.. code:: python
+
+  from unstructured.partition.api import partition_multiple_via_api
+
+  filenames = ["example-docs/fake-email.eml", "example-docs/fake.docx"]
+
+  documents = partition_multiple_via_api(filenames=filenames)
+
+
+.. code:: python
+
+  from contextlib import ExitStack
+
+  from unstructured.partition.api import partition_multiple_via_api
+
+  filenames = ["example-docs/fake-email.eml", "example-docs/fake.docx"]
+  files = [open(filename, "rb") for filename in filenames]
+
+  with ExitStack() as stack:
+      files = [stack.enter_context(open(filename, "rb")) for filename in filenames]
+      documents = partition_multiple_via_api(files=files, file_filenames=filenames)
+
+For more information about the ``partition_multiple_via_api`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/api.py>`_.
+
+
+``partition_odt``
+------------------
+
+The ``partition_odt`` partitioning brick pre-processes Open Office documents
+saved in the ``.odt`` format. The function first converts the document
+to ``.docx`` using ``pandoc`` and then processes it using ``partition_docx``.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.partition.odt import partition_odt
+
+  elements = partition_odt(filename="example-docs/fake.odt")
+
+For more information about the ``partition_odt`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/odt.py>`_.
+
+
+``partition_org``
 ---------------------
 
-The ``partition_epub`` function processes e-books in EPUB3 format. The function
-first converts the document to HTML using ``pandocs`` and then calls ``partition_html``.
-You'll need `pandocs <https://pandoc.org/installing.html>`_ installed on your system
-to use ``partition_epub``.
+The ``partition_org`` function processes Org Mode (``.org``) documents. The function
+first converts the document to HTML using ``pandoc`` and then calls ``partition_html``.
+You'll need `pandoc <https://pandoc.org/installing.html>`_ installed on your system
+to use ``partition_org``.
 
 
 Examples:
 
 .. code:: python
 
-  from unstructured.partition.epub import partition_epub
+  from unstructured.partition.org import partition_org
 
-  elements = partition_epub(filename="example-docs/winter-sports.epub")
+  elements = partition_org(filename="example-docs/README.org")
+
+For more information about the ``partition_org`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/org.py>`_.
+
+
+``partition_pdf``
+---------------------
+
+The ``partition_pdf`` function segments a PDF document by using a document image analysis model.
+If you set ``url=None``, the document image analysis model will execute locally. You need to install ``unstructured[local-inference]``
+if you'd like to run inference locally.
+If you set the URL, ``partition_pdf`` will make a call to a remote inference server.
+``partition_pdf`` also includes a ``token`` function that allows you to pass in an authentication
+token for a remote API call.
+
+You can also specify what languages to use for OCR with the ``ocr_languages`` kwarg. For example,
+use ``ocr_languages="eng+deu"`` to use the English and German language packs. See the
+`Tesseract documentation <https://github.com/tesseract-ocr/tessdata>`_ for a full list of languages and
+install instructions. OCR is only applied if the text is not already available in the PDF document.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.partition.pdf import partition_pdf
+
+  # Returns a List[Element] present in the pages of the parsed pdf document
+  elements = partition_pdf("example-docs/layout-parser-paper-fast.pdf")
+
+  # Applies the English and Swedish language pack for ocr. OCR is only applied
+  # if the text is not available in the PDF.
+  elements = partition_pdf("example-docs/layout-parser-paper-fast.pdf", ocr_languages="eng+swe")
+
+
+The ``strategy`` kwarg controls the method that will be used to process the PDF.
+The available strategies for PDFs are ``"auto"``, ``"hi_res"``, ``"ocr_only"``, and ``"fast"``.
+
+The ``"auto"`` strategy will choose the partitioning strategy based on document characteristics and the function kwargs.
+If ``infer_table_structure`` is passed, the strategy will be ``"hi_res"`` because that is the only strategy that
+currently extracts tables for PDFs. Otherwise, ``"auto"`` will choose ``"fast"`` if the PDF text is extractable and
+``"ocr_only"`` otherwise. ``"auto"`` is the default strategy.
+
+The ``"hi_res"`` strategy will identify the layout of the document using ``detectron2``. The advantage of `"hi_res"` is that
+it uses the document layout to gain additional information about document elements. We recommend using this strategy
+if your use case is highly sensitive to correct classifications for document elements. If ``detectron2`` is not available,
+the ``"hi_res"`` strategy will fall back to the ``"ocr_only"`` strategy.
+
+The ``"ocr_only"`` strategy runs the document through Tesseract for OCR and then runs the raw text through ``partition_text``.
+Currently, ``"hi_res"`` has difficulty ordering elements for documents with multiple columns. If you have a document with
+multiple columns that does not have extractable text, we recommend using the ``"ocr_only"`` strategy. ``"ocr_only"`` falls
+back to ``"fast"`` if Tesseract is not available and the document has extractable text.
+
+The ``"fast"`` strategy will extract the text using ``pdfminer`` and process the raw text with ``partition_text``.
+If the PDF text is not extractable, ``partition_pdf`` will fall back to ``"ocr_only"``. We recommend using the
+``"fast"`` strategy in most cases where the PDF has extractable text.
+
+If a PDF is copy protected, ``partition_pdf`` can process the document with the ``"hi_res"`` strategy (which
+will treat it like an image), but cannot process the document with the ``"fast"`` strategy.
+If the user chooses ``"fast"`` on a copy protected PDF, ``partition_pdf`` will fall back to the ``"hi_res"``
+strategy. If ``detectron2`` is not installed, ``partition_pdf`` will fail for copy protected
+PDFs because the document will not be processable by any of the available methods.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.partition.pdf import partition_pdf
+
+  # This will process without issue
+  elements = partition_pdf("example-docs/copy-protected.pdf", strategy="hi_res")
+
+  # This will output a warning and fall back to hi_res
+  elements = partition_pdf("example-docs/copy-protected.pdf", strategy="fast")
+
+
+``partition_pdf`` includes a ``max_partition`` parameter that indicates the maximum character
+length for a document element.
+This parameter only applies if the ``"ocr_only"`` strategy is used for partitioning.
+The default value is ``1500``, which roughly corresponds to
+the average character length for a paragraph.
+You can disable ``max_partition`` by setting it to ``None``.
+
+For more information about the ``partition_pdf`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/pdf.py>`_.
+
+
+``partition_ppt``
+---------------------
+
+The ``partition_ppt`` partitioning brick pre-processes Microsoft PowerPoint documents
+saved in the ``.ppt`` format. This partition brick uses a combination of the styling
+information in the document and the structure of the text to determine the type
+of a text element. The ``partition_ppt`` can take a filename or file-like object.
+``partition_ppt`` uses ``libreoffice`` to convert the file to ``.pptx`` and then
+calls ``partition_pptx``. Ensure you have ``libreoffice`` installed
+before using ``partition_ppt``.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.partition.ppt import partition_ppt
+
+  elements = partition_ppt(filename="example-docs/fake-power-point.ppt")
+
+For more information about the ``partition_ppt`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/ppt.py>`_.
+
+
+``partition_pptx``
+---------------------
+
+The ``partition_pptx`` partitioning brick pre-processes Microsoft PowerPoint documents
+saved in the ``.pptx`` format. This partition brick uses a combination of the styling
+information in the document and the structure of the text to determine the type
+of a text element. The ``partition_pptx`` can take a filename or file-like object
+as input, as shown in the two examples below.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.partition.pptx import partition_pptx
+
+  elements = partition_pptx(filename="example-docs/fake-power-point.pptx")
+
+  with open("example-docs/fake-power-point.pptx", "rb") as f:
+      elements = partition_pptx(file=f)
+
+For more information about the ``partition_pptx`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/pptx.py>`_.
+
+
+``partition_rst``
+---------------------
+
+The ``partition_rst`` function processes ReStructured Text (``.rst``) documents. The function
+first converts the document to HTML using ``pandoc`` and then calls ``partition_html``.
+You'll need `pandoc <https://pandoc.org/installing.html>`_ installed on your system
+to use ``partition_rst``.
+
+
+Examples:
+
+.. code:: python
+
+  from unstructured.partition.rst import partition_rst
+
+  elements = partition_rst(filename="example-docs/README.rst")
+
+For more information about the ``partition_rst`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/rst.py>`_.
 
 
 ``partition_rtf``
@@ -620,22 +715,7 @@ Examples:
 
   elements = partition_rtf(filename="example-docs/fake-doc.rtf")
 
-
-``partition_md``
----------------------
-
-The ``partition_md`` function provides the ability to parse markdown files. The
-following workflow shows how to use ``partition_md``.
-
-
-Examples:
-
-.. code:: python
-
-  from unstructured.partition.md import partition_md
-
-  elements = partition_md(filename="README.md")
-
+For more information about the ``partition_rtf`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/rtf.py>`_.
 
 
 ``partition_text``
@@ -679,6 +759,138 @@ Examples:
   fox met a bear."""
 
   partition_text(text=text, paragraph_grouper=group_broken_paragraphs)
+
+``partition_text`` includes a ``max_partition`` parameter that indicates the maximum character
+length for a document element.
+The default value is ``1500``, which roughly corresponds to
+the average character length for a paragraph.
+You can disable ``max_partition`` by setting it to ``None``.
+
+For more information about the ``partition_text`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/text.py>`_.
+
+
+``partition_tsv``
+------------------
+
+The ``partition_tsv`` function pre-processes TSV files. The output is a single
+``Table`` element. The ``text_as_html`` attribute in the element metadata will
+contain an HTML representation of the table.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.partition.tsv import partition_tsv
+
+  elements = partition_tsv(filename="example-docs/stanley-cups.tsv")
+  print(elements[0].metadata.text_as_html)
+
+For more information about the ``partition_tsv`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/main/unstructured/partition/tsv.py>`_.
+
+
+``partition_via_api``
+---------------------
+
+``partition_via_api`` allows users to partition documents using the hosted Unstructured API.
+The API partitions documents using the automatic ``partition`` function.
+This is helpful if you're hosting
+the API yourself or running it locally through a container. You can pass in your API key
+using the ``api_key`` kwarg. You can use the ``content_type`` kwarg to pass in the MIME
+type for the file. If you do not explicitly pass it, the MIME type will be inferred.
+
+
+.. code:: python
+
+  from unstructured.partition.api import partition_via_api
+
+  filename = "example-docs/eml/fake-email.eml"
+
+  elements = partition_via_api(filename=filename, api_key="MY_API_KEY", content_type="message/rfc822")
+
+  with open(filename, "rb") as f:
+    elements = partition_via_api(file=f, file_filename=filename, api_key="MY_API_KEY")
+
+
+You can pass additional settings such as ``strategy``, ``ocr_languages`` and ``encoding`` to the
+API through optional kwargs. These options get added to the request body when the
+API is called.
+See `the API documentation <https://api.unstructured.io/general/docs>`_ for a full list of
+settings supported by the API.
+
+.. code:: python
+
+  from unstructured.partition.api import partition_via_api
+
+  filename = "example-docs/DA-1p.pdf"
+
+  elements = partition_via_api(
+    filename=filename, api_key=api_key, strategy="auto", pdf_infer_table_structure="true"
+  )
+
+If you are self-hosting or running the API locally, you can use the ``api_url`` kwarg
+to point the ``partition_via_api`` function at your self-hosted or local API.
+See `here <https://github.com/Unstructured-IO/unstructured-api#dizzy-instructions-for-using-the-docker-image>`_ for
+documentation on how to run the API as a container locally.
+
+
+.. code:: python
+
+  from unstructured.partition.api import partition_via_api
+
+  filename = "example-docs/eml/fake-email.eml"
+
+  elements = partition_via_api(
+    filename=filename, api_url="http://localhost:5000/general/v0/general"
+  )
+
+For more information about the ``partition_via_api`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/api.py>`_.
+
+
+``partition_xlsx``
+------------------
+
+The ``partition_xlsx`` function pre-processes Microsoft Excel documents. Each
+sheet in the Excel file will be stored as a ``Table`` object. The plain text
+of the sheet will be the ``text`` attribute of the ``Table``. The ``text_as_html``
+attribute in the element metadata will contain an HTML representation of the table.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.partition.xlsx import partition_xlsx
+
+  elements = partition_xlsx(filename="example-docs/stanley-cups.xlsx")
+  print(elements[0].metadata.text_as_html)
+
+For more information about the ``partition_xlsx`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/xlsx.py>`_.
+
+
+``partition_xml``
+-----------------
+
+The ``partition_xml`` function processes XML documents.
+If ``xml_keep_tags=False``, the function only returns the text attributes from the tags.
+You can use ``xml_path`` in conjuntion with ``xml_keep_tags=False`` to restrict the text
+extraction to specific tags.
+If ``xml_keep_tags=True``, the function returns tag information in addition to tag text.
+``xml_keep_tags`` is ``False`` be default.
+
+
+.. code:: python
+
+  from unstructured.partition.xml import partition_xml
+
+  elements = partition_xml(filename="example-docs/factbook.xml", xml_keep_tags=True)
+
+  elements = partition_xml(filename="example-docs/factbook.xml", xml_keep_tags=False)
+
+``partition_xml`` includes a ``max_partition`` parameter that indicates the maximum character length for a document element.
+The default value is ``1500``, which roughly corresponds to
+the average character length for a paragraph.
+You can disable ``max_partition`` by setting it to ``None``.
+
+For more information about the ``partition_xml`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/xml.py>`_.
 
 
 ########
@@ -735,6 +947,37 @@ In the example below, we remove citations from a section of text.
 See below for a full list of cleaning bricks in the ``unstructured`` library.
 
 
+``bytes_string_to_string``
+---------------------------
+
+Converts an output string that looks like a byte string to a string using the specified encoding. This
+happens sometimes in ``partition_html`` when there is a character like an emoji that isn't expected
+by the HTML parser. In that case, the encoded bytes get processed.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.cleaners.core import bytes_string_to_string
+
+  text = "Hello ð\x9f\x98\x80"
+  # The output should be "Hello 😀"
+  bytes_string_to_string(text, encoding="utf-8")
+
+
+.. code:: python
+
+  from unstructured.cleaners.core import bytes_string_to_string
+  from unstructured.partition.html import partition_html
+
+  text = """\n<html charset="utf-8"><p>Hello 😀</p></html>"""
+  elements = partition_html(text=text)
+  elements[0].apply(bytes_string_to_string)
+  # The output should be "Hello 😀"
+  elements[0].text
+
+For more information about the ``bytes_string_to_string`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
+
 
 ``clean``
 ---------
@@ -763,6 +1006,8 @@ Examples:
   # Returns "ITEM 1A: RISK FACTORS"
   clean("ITEM 1A:     RISK-FACTORS", extra_whitespace=True, dashes=True)
 
+For more information about the ``clean`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
+
 
 ``clean_bullets``
 -----------------
@@ -782,6 +1027,63 @@ Examples:
   # Returns "I love Morse Code! ●●●"
   clean_bullets("I love Morse Code! ●●●")
 
+For more information about the ``clean_bullets`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
+
+
+``clean_dashes``
+----------------
+
+Removes dashes from a section of text. Also handles special characters
+such as ``\u2013``.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.cleaners.core import clean_dashes
+
+  # Returns "ITEM 1A: RISK FACTORS"
+  clean_dashes("ITEM 1A: RISK-FACTORS\u2013")
+
+For more information about the ``clean_dashes`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
+
+
+``clean_extra_whitespace``
+--------------------------
+
+Removes extra whitespace from a section of text. Also handles special characters
+such as ``\xa0`` and newlines.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.cleaners.core import clean_extra_whitespace
+
+  # Returns "ITEM 1A: RISK FACTORS"
+  clean_extra_whitespace("ITEM 1A:     RISK FACTORS\n")
+
+For more information about the ``clean_extra_whitespace`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
+
+
+``clean_non_ascii_chars``
+-------------------------
+
+Removes non-ascii characters from a string.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.cleaners.core import clean_non_ascii_chars
+
+  text = "\x88This text contains®non-ascii characters!●"
+
+  # Returns "This text containsnon-ascii characters!"
+  clean_non_ascii_chars(text)
+
+For more information about the ``clean_non_ascii_chars`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
+
 
 ``clean_ordered_bullets``
 -------------------------
@@ -800,37 +1102,57 @@ Examples:
   # Returns "This is a very important point ●"
   clean_bullets("a.b This is a very important point ●")
 
+For more information about the ``clean_ordered_bullets`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
 
-``clean_extra_whitespace``
---------------------------
 
-Removes extra whitespace from a section of text. Also handles special characters
-such as ``\xa0`` and newlines.
+``clean_postfix``
+-----------------
+
+Removes the postfix from a string if they match a specified pattern.
+
+Options:
+
+* Ignores case if ``ignore_case`` is set to ``True``. The default is ``False``.
+* Strips trailing whitespace is ``strip`` is set to ``True``. The default is ``True``.
+
 
 Examples:
 
 .. code:: python
 
-  from unstructured.cleaners.core import clean_extra_whitespace
+  from unstructured.cleaners.core import clean_postfix
 
-  # Returns "ITEM 1A: RISK FACTORS"
-  clean_extra_whitespace("ITEM 1A:     RISK FACTORS\n")
+  text = "The end! END"
+
+  # Returns "The end!"
+  clean_postfix(text, r"(END|STOP)", ignore_case=True)
+
+For more information about the ``clean_postfix`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
 
 
-``clean_dashes``
+``clean_prefix``
 ----------------
 
-Removes dashes from a section of text. Also handles special characters
-such as ``\u2013``.
+Removes the prefix from a string if they match a specified pattern.
+
+Options:
+
+* Ignores case if ``ignore_case`` is set to ``True``. The default is ``False``.
+* Strips leading whitespace is ``strip`` is set to ``True``. The default is ``True``.
+
 
 Examples:
 
 .. code:: python
 
-  from unstructured.cleaners.core import clean_dashes
+  from unstructured.cleaners.core import clean_prefix
 
-  # Returns "ITEM 1A: RISK FACTORS"
-  clean_dashes("ITEM 1A: RISK-FACTORS\u2013")
+  text = "SUMMARY: This is the best summary of all time!"
+
+  # Returns "This is the best summary of all time!"
+  clean_prefix(text, r"(SUMMARY|DESCRIPTION):", ignore_case=True)
+
+For more information about the ``clean_prefix`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
 
 
 ``clean_trailing_punctuation``
@@ -846,6 +1168,196 @@ Examples:
 
   # Returns "ITEM 1A: RISK FACTORS"
   clean_trailing_punctuation("ITEM 1A: RISK FACTORS.")
+
+For more information about the ``clean_trailing_punctuation`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
+
+
+``extract_datetimetz``
+----------------------
+
+Extracts the date, time, and timezone in the ``Received`` field(s) from an ``.eml``
+file. ``extract_datetimetz`` takes in a string and returns a datetime.datetime
+object from the input string.
+
+.. code:: python
+
+  from unstructured.cleaners.extract import extract_datetimetz
+
+  text = """from ABC.DEF.local ([ba23::58b5:2236:45g2:88h2]) by
+    \n ABC.DEF.local2 ([ba23::58b5:2236:45g2:88h2%25]) with mapi id\
+    n 32.88.5467.123; Fri, 26 Mar 2021 11:04:09 +1200"""
+
+  # Returns datetime.datetime(2021, 3, 26, 11, 4, 9, tzinfo=datetime.timezone(datetime.timedelta(seconds=43200)))
+  extract_datetimetz(text)
+
+For more information about the ``extract_datetimetz`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/extract.py>`_.
+
+
+``extract_email_address``
+--------------------------
+
+Extracts email addresses from a string input and returns a list of all the email
+addresses in the input string.
+
+.. code:: python
+
+  from unstructured.cleaners.extract import extract_email_address
+
+  text = """Me me@email.com and You <You@email.com>
+      ([ba23::58b5:2236:45g2:88h2]) (10.0.2.01)"""
+
+  # Returns "['me@email.com', 'you@email.com']"
+  extract_email_address(text)
+
+For more information about the ``extract_email_address`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/extract.py>`_.
+
+
+``extract_ip_address``
+------------------------
+
+Extracts IPv4 and IPv6 IP addresses in the input string and
+returns a list of all IP address in input string.
+
+.. code:: python
+
+  from unstructured.cleaners.extract import extract_ip_address
+
+  text = """Me me@email.com and You <You@email.com>
+    ([ba23::58b5:2236:45g2:88h2]) (10.0.2.01)"""
+
+  # Returns "['ba23::58b5:2236:45g2:88h2', '10.0.2.01']"
+  extract_ip_address(text)
+
+For more information about the ``extract_ip_address`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/extract.py>`_.
+
+
+``extract_ip_address_name``
+----------------------------
+
+Extracts the names of each IP address in the ``Received`` field(s) from an ``.eml``
+file. ``extract_ip_address_name`` takes in a string and returns a list of all
+IP addresses in the input string.
+
+.. code:: python
+
+  from unstructured.cleaners.extract import extract_ip_address_name
+
+  text = """from ABC.DEF.local ([ba23::58b5:2236:45g2:88h2]) by
+    \n ABC.DEF.local2 ([ba23::58b5:2236:45g2:88h2%25]) with mapi id\
+    n 32.88.5467.123; Fri, 26 Mar 2021 11:04:09 +1200"""
+
+  # Returns "['ABC.DEF.local', 'ABC.DEF.local2']"
+  extract_ip_address_name(text)
+
+For more information about the ``extract_ip_address_name`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/extract.py>`_.
+
+
+``extract_mapi_id``
+----------------------
+
+Extracts the ``mapi id`` in the ``Received`` field(s) from an ``.eml``
+file. ``extract_mapi_id`` takes in a string and returns a list of a string
+containing the ``mapi id`` in the input string.
+
+.. code:: python
+
+  from unstructured.cleaners.extract import extract_mapi_id
+
+  text = """from ABC.DEF.local ([ba23::58b5:2236:45g2:88h2]) by
+    \n ABC.DEF.local2 ([ba23::58b5:2236:45g2:88h2%25]) with mapi id\
+    n 32.88.5467.123; Fri, 26 Mar 2021 11:04:09 +1200"""
+
+  # Returns "['32.88.5467.123']"
+  extract_mapi_id(text)
+
+For more information about the ``extract_mapi_id`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/extract.py>`_.
+
+
+``extract_ordered_bullets``
+---------------------------
+
+Extracts alphanumeric bullets from the beginning of text up to three “sub-section” levels.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.cleaners.extract import extract_ordered_bullets
+
+  # Returns ("1", "1", None)
+  extract_ordered_bullets("1.1 This is a very important point")
+
+  # Returns ("a", "1", None)
+  extract_ordered_bullets("a.1 This is a very important point")
+
+For more information about the ``extract_ordered_bullets`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/extract.py>`_.
+
+
+``extract_text_after``
+----------------------
+
+Extracts text that occurs after the specified pattern.
+
+Options:
+
+* If ``index`` is set, extract after the ``(index + 1)``\th occurrence of the pattern. The default is ``0``.
+* Strips trailing whitespace if ``strip`` is set to ``True``. The default is ``True``.
+
+
+Examples:
+
+.. code:: python
+
+  from unstructured.cleaners.extract import extract_text_after
+
+  text = "SPEAKER 1: Look at me, I'm flying!"
+
+  # Returns "Look at me, I'm flying!"
+  extract_text_after(text, r"SPEAKER \d{1}:")
+
+For more information about the ``extract_text_after`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/extract.py>`_.
+
+
+``extract_text_before``
+-----------------------
+
+Extracts text that occurs before the specified pattern.
+
+Options:
+
+* If ``index`` is set, extract before the ``(index + 1)``\th occurrence of the pattern. The default is ``0``.
+* Strips leading whitespace if ``strip`` is set to ``True``. The default is ``True``.
+
+
+Examples:
+
+.. code:: python
+
+  from unstructured.cleaners.extract import extract_text_before
+
+  text = "Here I am! STOP Look at me! STOP I'm flying! STOP"
+
+  # Returns "Here I am!"
+  extract_text_before(text, r"STOP")
+
+For more information about the ``extract_text_before`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/extract.py>`_.
+
+
+``extract_us_phone_number``
+---------------------------
+
+Extracts a phone number from a section of text.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.cleaners.extract import extract_us_phone_number
+
+  # Returns "215-867-5309"
+  extract_us_phone_number("Phone number: 215-867-5309")
+
+For more information about the ``extract_us_phone_number`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/extract.py>`_.
 
 
 ``group_broken_paragraphs``
@@ -890,6 +1402,25 @@ Examples:
 
   group_broken_paragraphs(text, paragraph_split=para_split_re)
 
+For more information about the ``group_broken_paragraphs`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
+
+
+``remove_punctuation``
+--------------------------
+
+Removes ASCII and unicode punctuation from a string.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.cleaners.core import remove_punctuation
+
+  # Returns "A lovely quote"
+  remove_punctuation("“A lovely quote!”")
+
+For more information about the ``remove_punctuation`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
+
 
 ``replace_unicode_quotes``
 --------------------------
@@ -908,283 +1439,7 @@ Examples:
   # Returns ""‘A lovely quote!’"
   replace_unicode_characters("\x91A lovely quote!\x92")
 
-
-``remove_punctuation``
---------------------------
-
-Removes ASCII and unicode punctuation from a string.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.cleaners.core import remove_punctuation
-
-  # Returns "A lovely quote"
-  remove_punctuation("“A lovely quote!”")
-
-
-``clean_prefix``
-----------------
-
-Removes the prefix from a string if they match a specified pattern.
-
-Options:
-
-* Ignores case if ``ignore_case`` is set to ``True``. The default is ``False``.
-* Strips leading whitespace is ``strip`` is set to ``True``. The default is ``True``.
-
-
-Examples:
-
-.. code:: python
-
-  from unstructured.cleaners.core import clean_prefix
-
-  text = "SUMMARY: This is the best summary of all time!"
-
-  # Returns "This is the best summary of all time!"
-  clean_prefix(text, r"(SUMMARY|DESCRIPTION):", ignore_case=True)
-
-
-``clean_postfix``
------------------
-
-Removes the postfix from a string if they match a specified pattern.
-
-Options:
-
-* Ignores case if ``ignore_case`` is set to ``True``. The default is ``False``.
-* Strips trailing whitespace is ``strip`` is set to ``True``. The default is ``True``.
-
-
-Examples:
-
-.. code:: python
-
-  from unstructured.cleaners.core import clean_postfix
-
-  text = "The end! END"
-
-  # Returns "The end!"
-  clean_postfix(text, r"(END|STOP)", ignore_case=True)
-
-
-``clean_non_ascii_chars``
--------------------------
-
-Removes non-ascii characters from a string.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.cleaners.core import clean_non_ascii_chars
-
-  text = "\x88This text contains®non-ascii characters!●"
-
-  # Returns "This text containsnon-ascii characters!"
-  clean_non_ascii_chars(text)
-
-
-``extract_text_before``
------------------------
-
-Extracts text that occurs before the specified pattern.
-
-Options:
-
-* If ``index`` is set, extract before the ``(index + 1)``\th occurrence of the pattern. The default is ``0``.
-* Strips leading whitespace if ``strip`` is set to ``True``. The default is ``True``.
-
-
-Examples:
-
-.. code:: python
-
-  from unstructured.cleaners.extract import extract_text_before
-
-  text = "Here I am! STOP Look at me! STOP I'm flying! STOP"
-
-  # Returns "Here I am!"
-  extract_text_before(text, r"STOP")
-
-
-``extract_text_after``
-----------------------
-
-Extracts text that occurs after the specified pattern.
-
-Options:
-
-* If ``index`` is set, extract after the ``(index + 1)``\th occurrence of the pattern. The default is ``0``.
-* Strips trailing whitespace if ``strip`` is set to ``True``. The default is ``True``.
-
-
-Examples:
-
-.. code:: python
-
-  from unstructured.cleaners.extract import extract_text_after
-
-  text = "SPEAKER 1: Look at me, I'm flying!"
-
-  # Returns "Look at me, I'm flying!"
-  extract_text_after(text, r"SPEAKER \d{1}:")
-
-
-``bytes_string_to_string``
----------------------------
-
-Converts an output string that looks like a byte string to a string using the specified encoding. This
-happens sometimes in ``partition_html`` when there is a character like an emoji that isn't expected
-by the HTML parser. In that case, the encoded bytes get processed.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.cleaners.core import bytes_string_to_string
-
-  text = "Hello ð\x9f\x98\x80"
-  # The output should be "Hello 😀"
-  bytes_string_to_string(text, encoding="utf-8")
-
-
-.. code:: python
-
-  from unstructured.cleaners.core import bytes_string_to_string
-  from unstructured.partition.html import partition_html
-
-  text = """\n<html charset="utf-8"><p>Hello 😀</p></html>"""
-  elements = partition_html(text=text)
-  elements[0].apply(bytes_string_to_string)
-  # The output should be "Hello 😀"
-  elements[0].text
-
-
-``extract_email_address``
---------------------------
-
-Extracts email addresses from a string input and returns a list of all the email
-addresses in the input string.
-
-.. code:: python
-
-  from unstructured.cleaners.extract import extract_email_address
-
-  text = """Me me@email.com and You <You@email.com>
-      ([ba23::58b5:2236:45g2:88h2]) (10.0.2.01)"""
-
-  # Returns "['me@email.com', 'you@email.com']"
-  extract_email_address(text)
-
-
-``extract_ip_address``
-------------------------
-
-Extracts IPv4 and IPv6 IP addresses in the input string and
-returns a list of all IP address in input string.
-
-.. code:: python
-
-  from unstructured.cleaners.extract import extract_ip_address
-
-  text = """Me me@email.com and You <You@email.com>
-    ([ba23::58b5:2236:45g2:88h2]) (10.0.2.01)"""
-
-  # Returns "['ba23::58b5:2236:45g2:88h2', '10.0.2.01']"
-  extract_ip_address(text)
-
-
-``extract_ip_address_name``
-----------------------------
-
-Extracts the names of each IP address in the ``Received`` field(s) from an ``.eml``
-file. ``extract_ip_address_name`` takes in a string and returns a list of all
-IP addresses in the input string.
-
-.. code:: python
-
-  from unstructured.cleaners.extract import extract_ip_address_name
-
-  text = """from ABC.DEF.local ([ba23::58b5:2236:45g2:88h2]) by
-    \n ABC.DEF.local2 ([ba23::58b5:2236:45g2:88h2%25]) with mapi id\
-    n 32.88.5467.123; Fri, 26 Mar 2021 11:04:09 +1200"""
-
-  # Returns "['ABC.DEF.local', 'ABC.DEF.local2']"
-  extract_ip_address_name(text)
-
-
-``extract_mapi_id``
-----------------------
-
-Extracts the ``mapi id`` in the ``Received`` field(s) from an ``.eml``
-file. ``extract_mapi_id`` takes in a string and returns a list of a string
-containing the ``mapi id`` in the input string.
-
-.. code:: python
-
-  from unstructured.cleaners.extract import extract_mapi_id
-
-  text = """from ABC.DEF.local ([ba23::58b5:2236:45g2:88h2]) by
-    \n ABC.DEF.local2 ([ba23::58b5:2236:45g2:88h2%25]) with mapi id\
-    n 32.88.5467.123; Fri, 26 Mar 2021 11:04:09 +1200"""
-
-  # Returns "['32.88.5467.123']"
-  extract_mapi_id(text)
-
-
-``extract_datetimetz``
-----------------------
-
-Extracts the date, time, and timezone in the ``Received`` field(s) from an ``.eml``
-file. ``extract_datetimetz`` takes in a string and returns a datetime.datetime
-object from the input string.
-
-.. code:: python
-
-  from unstructured.cleaners.extract import extract_datetimetz
-
-  text = """from ABC.DEF.local ([ba23::58b5:2236:45g2:88h2]) by
-    \n ABC.DEF.local2 ([ba23::58b5:2236:45g2:88h2%25]) with mapi id\
-    n 32.88.5467.123; Fri, 26 Mar 2021 11:04:09 +1200"""
-
-  # Returns datetime.datetime(2021, 3, 26, 11, 4, 9, tzinfo=datetime.timezone(datetime.timedelta(seconds=43200)))
-  extract_datetimetz(text)
-
-
-``extract_us_phone_number``
----------------------------
-
-Extracts a phone number from a section of text.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.cleaners.extract import extract_us_phone_number
-
-  # Returns "215-867-5309"
-  extract_us_phone_number("Phone number: 215-867-5309")
-
-
-``extract_ordered_bullets``
----------------------------
-
-Extracts alphanumeric bullets from the beginning of text up to three “sub-section” levels.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.cleaners.extract import extract_ordered_bullets
-
-  # Returns ("1", "1", None)
-  extract_ordered_bullets("1.1 This is a very important point")
-
-  # Returns ("a", "1", None)
-  extract_ordered_bullets("a.1 This is a very important point")
+For more information about the ``replace_unicode_quotes`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/core.py>`_.
 
 
 ``translate_text``
@@ -1217,6 +1472,8 @@ Examples:
   # Output is "I can also translate Russian!"
   translate_text("Я тоже можно переводать русский язык!", "ru", "en")
 
+For more information about the ``translate_text`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/cleaners/translate.py>`_.
+
 
 #######
 Staging
@@ -1238,6 +1495,44 @@ We can take this data and directly upload it into LabelStudio to quickly get sta
   print(json.dumps(output[:2], indent=4))
 
 
+``convert_to_csv``
+----------------------
+
+Converts outputs to the initial structured data (ISD) format as a CSV string.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.documents.elements import Title, NarrativeText
+  from unstructured.staging.base import convert_to_csv
+
+  elements = [Title(text="Title"), NarrativeText(text="Narrative")]
+  isd_csv = convert_to_csv(elements)
+
+For more information about the ``convert_to_csv`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/base.py>`_.
+
+
+``convert_to_dataframe``
+------------------------
+
+Converts a list of document ``Element`` objects to a ``pandas`` dataframe. The dataframe
+will have a ``text`` column with the text from the element and a ``type`` column
+indicating the element type, such as ``NarrativeText`` or ``Title``.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.documents.elements import Title, NarrativeText
+  from unstructured.staging.base import convert_to_dataframe
+
+  elements = [Title(text="Title"), NarrativeText(text="Narrative")]
+  df = convert_to_dataframe(elements)
+
+  For more information about the ``convert_to_dataframe`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/base.py>`_.
+
+
 ``convert_to_dict``
 --------------------
 
@@ -1253,6 +1548,8 @@ Examples:
 
   elements = [Title(text="Title"), NarrativeText(text="Narrative")]
   isd = convert_to_dict(elements)
+
+For more information about the ``convert_to_dict`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/base.py>`_.
 
 
 ``dict_to_elements``
@@ -1275,121 +1572,218 @@ Examples:
   # [ Title(text="My Title"), NarrativeText(text="My Narrative")]
   elements = dict_to_elements(isd)
 
-
-``convert_to_csv``
-----------------------
-
-Converts outputs to the initial structured data (ISD) format as a CSV string.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.documents.elements import Title, NarrativeText
-  from unstructured.staging.base import convert_to_csv
-
-  elements = [Title(text="Title"), NarrativeText(text="Narrative")]
-  isd_csv = convert_to_csv(elements)
+For more information about the ``dict_to_elements`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/base.py>`_.
 
 
-``convert_to_dataframe``
-------------------------
-
-Converts a list of document ``Element`` objects to a ``pandas`` dataframe. The dataframe
-will have a ``text`` column with the text from the element and a ``type`` column
-indicating the element type, such as ``NarrativeText`` or ``Title``.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.documents.elements import Title, NarrativeText
-  from unstructured.staging.base import convert_to_dataframe
-
-  elements = [Title(text="Title"), NarrativeText(text="Narrative")]
-  df = convert_to_dataframe(elements)
-
-
-``stage_for_transformers``
+``stage_csv_for_prodigy``
 --------------------------
 
-Prepares ``Text`` elements for processing in ``transformers`` pipelines
-by splitting the elements into chunks that fit into the model's attention window.
+Formats outputs in CSV format for use with `Prodigy <https://prodi.gy/docs/api-loaders>`_. After running ``stage_csv_for_prodigy``, you can
+write the results to a CSV file that is ready to be used with Prodigy.
 
 Examples:
 
 .. code:: python
 
-    from transformers import AutoTokenizer, AutoModelForTokenClassification
-    from transformers import pipeline
+  from unstructured.documents.elements import Title, NarrativeText
+  from unstructured.staging.prodigy import stage_csv_for_prodigy
 
-    from unstructured.documents.elements import NarrativeText
-    from unstructured.staging.huggingface import stage_for_transformers
+  elements = [Title(text="Title"), NarrativeText(text="Narrative")]
+  metadata = [{"type": "title"}, {"source": "news"}]
+  prodigy_csv_data = stage_csv_for_prodigy(elements, metadata)
 
-    model_name = "hf-internal-testing/tiny-bert-for-token-classification"
-    tokenizer = AutoTokenizer.from_pretrained(model_name)
-    model = AutoModelForTokenClassification.from_pretrained(model_name)
+  # The resulting CSV file is ready to be used with Prodigy
+  with open("prodigy.csv", "w") as csv_file:
+      csv_file.write(prodigy_csv_data)
 
-    nlp = pipeline("ner", model=model, tokenizer=tokenizer)
-
-    text = """From frost advisories this morning to a strong cold front expected later this week, the chance of fall showing up is real.
-
-    There's a refreshing crispness to the air, and it looks to get only more pronounced as the week goes on.
-
-    Frost advisories were in place this morning across portions of the Appalachians and coastal Maine as temperatures dropped into the 30s.
-
-    Temperatures this morning were in the 40s as far south as the Florida Panhandle.
-
-    And Maine even had a few reports of their first snow of the season Sunday. More cities could see their first snow later this week.
-
-    Yes, hello fall!
-
-    As temperatures moderate during the next few days, much of the east will stay right around seasonal norms, but the next blast of cold air will be strong and come with the potential for hazardous conditions.
-
-    "A more active fall weather pattern is expected to evolve by the end of this week and continuing into the weekend as a couple of cold fronts move across the central and eastern states," the Weather Prediction Center said.
-
-    The potent cold front will come in from Canada with a punch of chilly air, heavy rain and strong wind.
-
-    The Weather Prediction Center has a slight risk of excessive rainfall for much of the Northeast and New England on Thursday, including places like New York City, Buffalo and Burlington, so we will have to look out for flash flooding in these areas.
-
-    "More impactful weather continues to look likely with confidence growing that our region will experience the first real fall-like system with gusty to strong winds and a period of moderate to heavy rain along and ahead of a cold front passage," the National Weather Service office in Burlington wrote.
-
-    The potential for very heavy rain could accompany the front, bringing up to two inches of rain for much of the area, and isolated locations could see even more.
-
-    "Ensembles [forecast models] show median rainfall totals by Wednesday night around a half inch, with a potential for some spots to see around one inch, our first substantial rainfall in at least a couple of weeks," the weather service office in Grand Rapids noted, adding, "It may also get cold enough for some snow to mix in Thursday night to Friday morning, especially in the higher terrain north of Grand Rapids toward Cadillac."
-
-    There is also a chance for very strong winds to accompany the system.
-
-    The weather service is forecasting winds of 30-40 mph ahead of the cold front, which could cause some tree limbs to fall and sporadic power outages.
-
-    Behind the front, temperatures will fall.
-
-    "East Coast, with highs about 5-15 degrees below average to close out the workweek and going into next weekend, with highs only in the 40s and 50s from the Great Lakes to the Northeast on most days," the Weather Prediction Center explained.
-
-    By the weekend, a second cold front will drop down from Canada and bring a reinforcing shot of chilly air across the eastern half of the country."""
-
-    elements = stage_for_transformers([NarrativeText(text=text)], tokenizer)
+For more information about the ``stage_csv_for_prodigy`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/prodigy.py>`_.
 
 
-The following optional keyword arguments can be specified in
-``stage_for_transformers``:
+``stage_for_argilla``
+--------------------------
 
-    * ``buffer``: Indicates the number of tokens to leave as a buffer for the attention window. This is to account for special tokens like ``[CLS]`` that can appear at the beginning or end of an input sequence.
-    * ``max_input_size``: The size of the attention window for the model. If not specified, the default is the ``model_max_length`` attribute on the tokenizer object.
-    * ``split_function``: The function used to split the text into chunks to consider for adding to the attention window. Splits on spaces be default.
-    * ``chunk_separator``: The string used to concat adjacent chunks when reconstructing the text. Uses spaces by default.
+Convert a list of ``Text`` elements to an `Argilla Dataset <https://docs.argilla.io/en/latest/reference/python/python_client.html#python-ref-datasets>`_.
+The type of Argilla dataset to be generated can be specified with ``argilla_task``
+parameter. Valid values for ``argilla_task`` are ``"text_classification"``,
+``"token_classification"``, and ``"text2text"``. If ``"token_classification"`` is selected
+and ``tokens`` is not included in the optional kwargs, the ``nltk`` word tokenizer
+is used by default.
 
-  If you need to operate on text directly instead of ``unstructured`` ``Text``
-  objects, use the ``chunk_by_attention_window`` helper function. Simply modify
-  the example above to include the following:
 
-  .. code:: python
+Examples:
 
-    from unstructured.staging.huggingface import chunk_by_attention_window
+.. code:: python
 
-    chunks = chunk_by_attention_window(text, tokenizer)
+  import json
 
-    results = [nlp(chunk) for chunk in chunks]
+  from unstructured.documents.elements import Title, NarrativeText
+  from unstructured.staging.argilla import stage_for_argilla
+
+  elements = [Title(text="Title"), NarrativeText(text="Narrative")]
+  metadata = [{"type": "title"}, {"type": "text"}]
+
+  argilla_dataset = stage_for_argilla(elements, "text_classification", metadata=metadata)
+
+For more information about the ``stage_for_argilla`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/argilla.py>`_.
+
+
+``stage_for_baseplate``
+-----------------------
+
+The ``stage_for_baseplate`` staging function prepares a list of ``Element`` objects for ingestion
+into `Baseplate <https://docs.baseplate.ai/introduction>`_, an LLM backend with a spreadsheet interface.
+After running the ``stage_for_baseplate`` function, you can use the
+`Baseplate API <https://docs.baseplate.ai/api-reference/documents/upsert-data-rows>`_ to upload the documents
+to Baseplate. The following example code shows how to use the ``stage_for_baseplate`` function.
+
+.. code:: python
+
+  from unstructured.documents.elements import ElementMetadata, NarrativeText, Title
+  from unstructured.staging.baseplate import stage_for_baseplate
+
+  metadata = ElementMetadata(filename="fox.epub")
+
+  elements = [
+    Title("A Wonderful Story About A Fox", metadata=metadata),
+    NarrativeText(
+      "A fox ran into the chicken coop and the chickens flew off!",
+      metadata=metadata,
+    ),
+  ]
+
+  rows = stage_for_baseplate(elements)
+
+The output will look like:
+
+.. code:: python
+
+  {
+        "rows": [
+            {
+                "data": {
+                    "element_id": "ad270eefd1cc68d15f4d3e51666d4dc8",
+                    "text": "A Wonderful Story About A Fox",
+                    "type": "Title",
+                },
+                "metadata": {"filename": "fox.epub"},
+            },
+            {
+                "data": {
+                    "element_id": "8275769fdd1804f9f2b55ad3c9b0ef1b",
+                    "text": "A fox ran into the chicken coop and the chickens flew off!",
+                    "type": "NarrativeText",
+                },
+                "metadata": {"filename": "fox.epub"},
+            },
+        ],
+    }
+
+For more information about the ``stage_for_baseplate`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/baseplate.py>`_.
+
+
+``stage_for_datasaur``
+--------------------------
+Formats a list of ``Text`` elements as input to token based tasks in Datasaur.
+
+Example:
+
+.. code:: python
+
+  from unstructured.documents.elements import Text
+  from unstructured.staging.datasaur import stage_for_datasaur
+
+  elements  = [Text("Text1"),Text("Text2")]
+  datasaur_data = stage_for_datasaur(elements)
+
+The output is a list of dictionaries, each one with two keys:
+"text" with the content of the element and
+"entities" with an empty list.
+
+You can also specify entities in the ``stage_for_datasaur`` brick. Entities
+you specify in the input will be included in the entities key in the output. The list
+of entities is a list of dictionaries and must have all of the keys in the example below.
+The list of entities must be the same length as the list of elements. Use an empty
+list for any elements that do not have any entities.
+
+Example:
+
+.. code:: python
+
+  from unstructured.documents.elements import Text
+  from unstructured.staging.datasaur import stage_for_datasaur
+
+  elements  = [Text("Hi my name is Matt.")]
+  entities = [[{"text": "Matt", "type": "PER", "start_idx": 11, "end_idx": 15}]]
+  datasaur_data = stage_for_datasaur(elements, entities)
+
+For more information about the ``stage_for_datasaur`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/datasaur.py>`_.
+
+
+``stage_for_label_box``
+--------------------------
+
+Formats outputs for use with `LabelBox <https://docs.labelbox.com/docs/overview>`_. LabelBox accepts cloud-hosted data
+and does not support importing text directly. The ``stage_for_label_box`` does the following:
+
+* Stages the data files in the ``output_directory`` specified in function arguments to be uploaded to a cloud storage service.
+* Returns a config of type ``List[Dict[str, Any]]`` that can be written to a ``json`` file and imported into LabelBox.
+
+**Note:** ``stage_for_label_box`` does not upload the data to remote storage such as S3. Users can upload the data to S3
+using ``aws s3 sync ${output_directory} ${url_prefix}`` after running the ``stage_for_label_box`` staging brick.
+
+Examples:
+
+The following example demonstrates generating a ``config.json`` file that can be used with LabelBox and uploading the staged data
+files to an S3 bucket.
+
+.. code:: python
+
+  import os
+  import json
+
+  from unstructured.documents.elements import Title, NarrativeText
+  from unstructured.staging.label_box import stage_for_label_box
+
+  # The S3 Bucket name where data files should be uploaded.
+  S3_BUCKET_NAME = "labelbox-staging-bucket"
+
+  # The S3 key prefix (I.e. directory) where data files should be stored.
+  S3_BUCKET_KEY_PREFIX = "data/"
+
+  # The URL prefix where the data files will be accessed.
+  S3_URL_PREFIX = f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/{S3_BUCKET_KEY_PREFIX}"
+
+  # The local output directory where the data files will be staged for uploading to a Cloud Storage service.
+  LOCAL_OUTPUT_DIRECTORY = "/tmp/labelbox-staging"
+
+  elements = [Title(text="Title"), NarrativeText(text="Narrative")]
+
+  labelbox_config = stage_for_label_box(
+      elements,
+      output_directory=LOCAL_OUTPUT_DIRECTORY,
+      url_prefix=S3_URL_PREFIX,
+      external_ids=["id1", "id2"],
+      attachments=[[{"type": "RAW_TEXT", "value": "Title description"}], [{"type": "RAW_TEXT", "value": "Narrative Description"}]],
+      create_directory=True,
+  )
+
+  # The resulting JSON config file is ready to be used with LabelBox.
+  with open("config.json", "w+") as labelbox_config_file:
+      json.dump(labelbox_config, labelbox_config_file, indent=4)
+
+
+  # Upload staged data files to S3 from local output directory.
+  def upload_staged_files():
+      from s3fs import S3FileSystem
+      fs = S3FileSystem()
+      for filename in os.listdir(LOCAL_OUTPUT_DIRECTORY):
+          filepath = os.path.join(LOCAL_OUTPUT_DIRECTORY, filename)
+          upload_key = os.path.join(S3_BUCKET_KEY_PREFIX, filename)
+          fs.put_file(lpath=filepath, rpath=os.path.join(S3_BUCKET_NAME, upload_key))
+
+  upload_staged_files()
+
+For more information about the ``stage_for_label_box`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/label_box.py>`_.
 
 
 ``stage_for_label_studio``
@@ -1553,60 +1947,7 @@ task in LabelStudio:
 See the `LabelStudio docs <https://labelstud.io/tags/labels.html>`_ for a full list of options
 for labels and annotations.
 
-
-``stage_for_baseplate``
------------------------
-
-The ``stage_for_baseplate`` staging function prepares a list of ``Element`` objects for ingestion
-into `Baseplate <https://docs.baseplate.ai/introduction>`_, an LLM backend with a spreadsheet interface.
-After running the ``stage_for_baseplate`` function, you can use the
-`Baseplate API <https://docs.baseplate.ai/api-reference/documents/upsert-data-rows>`_ to upload the documents
-to Baseplate. The following example code shows how to use the ``stage_for_baseplate`` function.
-
-.. code:: python
-
-  from unstructured.documents.elements import ElementMetadata, NarrativeText, Title
-  from unstructured.staging.baseplate import stage_for_baseplate
-
-  metadata = ElementMetadata(filename="fox.epub")
-
-  elements = [
-    Title("A Wonderful Story About A Fox", metadata=metadata),
-    NarrativeText(
-      "A fox ran into the chicken coop and the chickens flew off!",
-      metadata=metadata,
-    ),
-  ]
-
-  rows = stage_for_baseplate(elements)
-
-The output will look like:
-
-.. code:: python
-
-  {
-        "rows": [
-            {
-                "data": {
-                    "element_id": "ad270eefd1cc68d15f4d3e51666d4dc8",
-                    "coordinates": None,
-                    "text": "A Wonderful Story About A Fox",
-                    "type": "Title",
-                },
-                "metadata": {"filename": "fox.epub"},
-            },
-            {
-                "data": {
-                    "element_id": "8275769fdd1804f9f2b55ad3c9b0ef1b",
-                    "coordinates": None,
-                    "text": "A fox ran into the chicken coop and the chickens flew off!",
-                    "type": "NarrativeText",
-                },
-                "metadata": {"filename": "fox.epub"},
-            },
-        ],
-    }
-
+For more information about the ``stage_for_label_studio`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/label_studio.py>`_.
 
 
 ``stage_for_prodigy``
@@ -1649,155 +1990,144 @@ use the ``save_as_jsonl`` utility function to save the formatted data to a ``.js
   # The resulting jsonl file is ready to be used with Prodigy.
   save_as_jsonl(prodigy_data, "prodigy.jsonl")
 
+For more information about the ``stage_for_prodigy`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/prodigy.py>`_.
 
 
-``stage_csv_for_prodigy``
+``stage_for_transformers``
 --------------------------
 
-Formats outputs in CSV format for use with `Prodigy <https://prodi.gy/docs/api-loaders>`_. After running ``stage_csv_for_prodigy``, you can
-write the results to a CSV file that is ready to be used with Prodigy.
+Prepares ``Text`` elements for processing in ``transformers`` pipelines
+by splitting the elements into chunks that fit into the model's attention window.
 
 Examples:
 
 .. code:: python
 
-  from unstructured.documents.elements import Title, NarrativeText
-  from unstructured.staging.prodigy import stage_csv_for_prodigy
+    from transformers import AutoTokenizer, AutoModelForTokenClassification
+    from transformers import pipeline
 
-  elements = [Title(text="Title"), NarrativeText(text="Narrative")]
-  metadata = [{"type": "title"}, {"source": "news"}]
-  prodigy_csv_data = stage_csv_for_prodigy(elements, metadata)
+    from unstructured.documents.elements import NarrativeText
+    from unstructured.staging.huggingface import stage_for_transformers
 
-  # The resulting CSV file is ready to be used with Prodigy
-  with open("prodigy.csv", "w") as csv_file:
-      csv_file.write(prodigy_csv_data)
+    model_name = "hf-internal-testing/tiny-bert-for-token-classification"
+    tokenizer = AutoTokenizer.from_pretrained(model_name)
+    model = AutoModelForTokenClassification.from_pretrained(model_name)
 
+    nlp = pipeline("ner", model=model, tokenizer=tokenizer)
 
+    text = """From frost advisories this morning to a strong cold front expected later this week, the chance of fall showing up is real.
 
-``stage_for_label_box``
---------------------------
+    There's a refreshing crispness to the air, and it looks to get only more pronounced as the week goes on.
 
-Formats outputs for use with `LabelBox <https://docs.labelbox.com/docs/overview>`_. LabelBox accepts cloud-hosted data
-and does not support importing text directly. The ``stage_for_label_box`` does the following:
+    Frost advisories were in place this morning across portions of the Appalachians and coastal Maine as temperatures dropped into the 30s.
 
-* Stages the data files in the ``output_directory`` specified in function arguments to be uploaded to a cloud storage service.
-* Returns a config of type ``List[Dict[str, Any]]`` that can be written to a ``json`` file and imported into LabelBox.
+    Temperatures this morning were in the 40s as far south as the Florida Panhandle.
 
-**Note:** ``stage_for_label_box`` does not upload the data to remote storage such as S3. Users can upload the data to S3
-using ``aws s3 sync ${output_directory} ${url_prefix}`` after running the ``stage_for_label_box`` staging brick.
+    And Maine even had a few reports of their first snow of the season Sunday. More cities could see their first snow later this week.
 
-Examples:
+    Yes, hello fall!
 
-The following example demonstrates generating a ``config.json`` file that can be used with LabelBox and uploading the staged data
-files to an S3 bucket.
+    As temperatures moderate during the next few days, much of the east will stay right around seasonal norms, but the next blast of cold air will be strong and come with the potential for hazardous conditions.
 
-.. code:: python
+    "A more active fall weather pattern is expected to evolve by the end of this week and continuing into the weekend as a couple of cold fronts move across the central and eastern states," the Weather Prediction Center said.
 
-  import os
-  import json
+    The potent cold front will come in from Canada with a punch of chilly air, heavy rain and strong wind.
 
-  from unstructured.documents.elements import Title, NarrativeText
-  from unstructured.staging.label_box import stage_for_label_box
+    The Weather Prediction Center has a slight risk of excessive rainfall for much of the Northeast and New England on Thursday, including places like New York City, Buffalo and Burlington, so we will have to look out for flash flooding in these areas.
 
-  # The S3 Bucket name where data files should be uploaded.
-  S3_BUCKET_NAME = "labelbox-staging-bucket"
+    "More impactful weather continues to look likely with confidence growing that our region will experience the first real fall-like system with gusty to strong winds and a period of moderate to heavy rain along and ahead of a cold front passage," the National Weather Service office in Burlington wrote.
 
-  # The S3 key prefix (I.e. directory) where data files should be stored.
-  S3_BUCKET_KEY_PREFIX = "data/"
+    The potential for very heavy rain could accompany the front, bringing up to two inches of rain for much of the area, and isolated locations could see even more.
 
-  # The URL prefix where the data files will be accessed.
-  S3_URL_PREFIX = f"https://{S3_BUCKET_NAME}.s3.amazonaws.com/{S3_BUCKET_KEY_PREFIX}"
+    "Ensembles [forecast models] show median rainfall totals by Wednesday night around a half inch, with a potential for some spots to see around one inch, our first substantial rainfall in at least a couple of weeks," the weather service office in Grand Rapids noted, adding, "It may also get cold enough for some snow to mix in Thursday night to Friday morning, especially in the higher terrain north of Grand Rapids toward Cadillac."
 
-  # The local output directory where the data files will be staged for uploading to a Cloud Storage service.
-  LOCAL_OUTPUT_DIRECTORY = "/tmp/labelbox-staging"
+    There is also a chance for very strong winds to accompany the system.
 
-  elements = [Title(text="Title"), NarrativeText(text="Narrative")]
+    The weather service is forecasting winds of 30-40 mph ahead of the cold front, which could cause some tree limbs to fall and sporadic power outages.
 
-  labelbox_config = stage_for_label_box(
-      elements,
-      output_directory=LOCAL_OUTPUT_DIRECTORY,
-      url_prefix=S3_URL_PREFIX,
-      external_ids=["id1", "id2"],
-      attachments=[[{"type": "RAW_TEXT", "value": "Title description"}], [{"type": "RAW_TEXT", "value": "Narrative Description"}]],
-      create_directory=True,
-  )
+    Behind the front, temperatures will fall.
 
-  # The resulting JSON config file is ready to be used with LabelBox.
-  with open("config.json", "w+") as labelbox_config_file:
-      json.dump(labelbox_config, labelbox_config_file, indent=4)
+    "East Coast, with highs about 5-15 degrees below average to close out the workweek and going into next weekend, with highs only in the 40s and 50s from the Great Lakes to the Northeast on most days," the Weather Prediction Center explained.
+
+    By the weekend, a second cold front will drop down from Canada and bring a reinforcing shot of chilly air across the eastern half of the country."""
+
+    elements = stage_for_transformers([NarrativeText(text=text)], tokenizer)
 
 
-  # Upload staged data files to S3 from local output directory.
-  def upload_staged_files():
-      from s3fs import S3FileSystem
-      fs = S3FileSystem()
-      for filename in os.listdir(LOCAL_OUTPUT_DIRECTORY):
-          filepath = os.path.join(LOCAL_OUTPUT_DIRECTORY, filename)
-          upload_key = os.path.join(S3_BUCKET_KEY_PREFIX, filename)
-          fs.put_file(lpath=filepath, rpath=os.path.join(S3_BUCKET_NAME, upload_key))
+The following optional keyword arguments can be specified in
+``stage_for_transformers``:
 
-  upload_staged_files()
+    * ``buffer``: Indicates the number of tokens to leave as a buffer for the attention window. This is to account for special tokens like ``[CLS]`` that can appear at the beginning or end of an input sequence.
+    * ``max_input_size``: The size of the attention window for the model. If not specified, the default is the ``model_max_length`` attribute on the tokenizer object.
+    * ``split_function``: The function used to split the text into chunks to consider for adding to the attention window. Splits on spaces be default.
+    * ``chunk_separator``: The string used to concat adjacent chunks when reconstructing the text. Uses spaces by default.
 
-``stage_for_datasaur``
---------------------------
-Formats a list of ``Text`` elements as input to token based tasks in Datasaur.
+  If you need to operate on text directly instead of ``unstructured`` ``Text``
+  objects, use the ``chunk_by_attention_window`` helper function. Simply modify
+  the example above to include the following:
 
-Example:
+  .. code:: python
+
+    from unstructured.staging.huggingface import chunk_by_attention_window
+
+    chunks = chunk_by_attention_window(text, tokenizer)
+
+    results = [nlp(chunk) for chunk in chunks]
+
+For more information about the ``stage_for_transformers`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/huggingface.py>`_.
+
+
+``stage_for_weaviate``
+-----------------------
+
+The ``stage_for_weaviate`` staging function prepares a list of ``Element`` objects for ingestion into
+the `Weaviate <https://weaviate.io/>`_ vector database. You can create a schema in Weaviate
+for the `unstructured` outputs using the following workflow:
 
 .. code:: python
 
-  from unstructured.documents.elements import Text
-  from unstructured.staging.datasaur import stage_for_datasaur
+  from unstructured.staging.weaviate import create_unstructured_weaviate_class
 
-  elements  = [Text("Text1"),Text("Text2")]
-  datasaur_data = stage_for_datasaur(elements)
+  import weaviate
 
-The output is a list of dictionaries, each one with two keys:
-"text" with the content of the element and
-"entities" with an empty list.
+  # Change `class_name` if you want the class for unstructured documents in Weaviate
+  # to have a different name
+  unstructured_class = create_unstructured_weaviate_class(class_name="UnstructuredDocument")
+  schema = {"classes": [unstructured_class]}
 
-You can also specify entities in the ``stage_for_datasaur`` brick. Entities
-you specify in the input will be included in the entities key in the output. The list
-of entities is a list of dictionaries and must have all of the keys in the example below.
-The list of entities must be the same length as the list of elements. Use an empty
-list for any elements that do not have any entities.
+  client = weaviate.Client("http://localhost:8080")
+  client.schema.create(schema)
 
-Example:
+
+Once the schema is created, you can batch upload documents to Weaviate using the following workflow.
+See the `Weaviate documentation <https://weaviate.io/developers/weaviate>`_ for more details on
+options for uploading data and querying data once it has been uploaded.
+
 
 .. code:: python
 
-  from unstructured.documents.elements import Text
-  from unstructured.staging.datasaur import stage_for_datasaur
+  from unstructured.partition.pdf import partition_pdf
+  from unstructured.staging.weaviate import stage_for_weaviate
 
-  elements  = [Text("Hi my name is Matt.")]
-  entities = [[{"text": "Matt", "type": "PER", "start_idx": 11, "end_idx": 15}]]
-  datasaur_data = stage_for_datasaur(elements, entities)
-
-
-``stage_for_argilla``
---------------------------
-
-Convert a list of ``Text`` elements to an `Argilla Dataset <https://docs.argilla.io/en/latest/reference/python/python_client.html#python-ref-datasets>`_.
-The type of Argilla dataset to be generated can be specified with ``argilla_task``
-parameter. Valid values for ``argilla_task`` are ``"text_classification"``,
-``"token_classification"``, and ``"text2text"``. If ``"token_classification"`` is selected
-and ``tokens`` is not included in the optional kwargs, the ``nltk`` word tokenizer
-is used by default.
+  import weaviate
+  from weaviate.util import generate_uuid5
 
 
-Examples:
+  filename = "example-docs/layout-parser-paper-fast.pdf"
+  elements = partition_pdf(filename=filename, strategy="fast")
+  data_objects = stage_for_weaviate(elements)
 
-.. code:: python
+  client = weaviate.Client("http://localhost:8080")
 
-  import json
+  with client.batch(batch_size=10) as batch:
+      for data_object in tqdm.tqdm(data_objects):
+          batch.add_data_object(
+              data_object,
+              unstructured_class_name,
+              uuid=generate_uuid5(data_object),
+          )
 
-  from unstructured.documents.elements import Title, NarrativeText
-  from unstructured.staging.argilla import stage_for_argilla
-
-  elements = [Title(text="Title"), NarrativeText(text="Narrative")]
-  metadata = [{"type": "title"}, {"type": "text"}]
-
-  argilla_dataset = stage_for_argilla(elements, "text_classification", metadata=metadata)
+For more information about the ``stage_for_weaviate`` brick, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/staging/weaviate.py>`_.
 
 
 ######################
@@ -1806,6 +2136,104 @@ Other helper functions
 
 The ``unstructured`` library also contains other useful helpful functions to aid in processing documents.
 You can see a list of the available helper functions below:
+
+
+``contains_us_phone_number``
+----------------------------
+
+Checks to see if a section of text contains a US phone number.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.partition.text_type import contains_us_phone_number
+
+  # Returns True because the text includes a phone number
+  contains_us_phone_number("Phone number: 215-867-5309")
+
+For more information about the ``contains_us_phone_number`` function, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/text_type.py>`_.
+
+
+``contains_verb``
+-----------------
+
+Checks if the text contains a verb. This is used in ``is_possible_narrative_text``, but can
+be used independently as well. The function identifies verbs using the NLTK part of speech
+tagger. Text that is all upper case is lower cased before part of speech detection. This is
+because the upper case letters sometimes cause the part of speech tagger to miss verbs.
+The following part of speech tags are identified as verbs:
+
+* ``VB``
+* ``VBG``
+* ``VBD``
+* ``VBN``
+* ``VBP``
+* ``VBZ``
+
+Examples:
+
+.. code:: python
+
+  from unstructured.partition.text_type import contains_verb
+
+  # Returns True because the text contains a verb
+  example_1 = "I am going to run to the store to pick up some milk."
+  contains_verb(example_1)
+
+  # Returns False because the text does not contain a verb
+  example_2 = "A friendly dog"
+  contains_verb(example_2)
+
+For more information about the ``contains_verb`` function, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/text_type.py>`_.
+
+
+``exceeds_cap_ratio``
+---------------------
+
+Determines if the section of text exceeds the specified caps ratio. Used in
+``is_possible_narrative_text`` and ``is_possible_title``, but can be used independently
+as well. You can set the caps threshold using the ``threshold`` kwarg. The threshold
+defaults to ``0.3``. Only runs on sections of text that are a single sentence. The caps ratio check does not apply to text that is all capitalized.
+
+Examples:
+
+.. code:: python
+
+  from unstructured.partition.text_type import exceeds_cap_ratio
+
+  # Returns True because the text is more than 30% caps
+  example_1 = "LOOK AT ME I AM YELLING"
+  exceeds_cap_ratio(example_1)
+
+  # Returns False because the text is less than 30% caps
+  example_2 = "Look at me, I am no longer yelling"
+  exceeds_cap_ratio(example_2)
+
+  # Returns False because the text is more than 1% caps
+  exceeds_cap_ratio(example_2, threshold=0.01)
+
+For more information about the ``exceeds_cap_ratio`` function, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/text_type.py>`_.
+
+
+``extract_attachment_info``
+----------------------------
+
+The ``extract_attachment_info`` function takes an ``email.message.Message`` object
+as input and returns the a list of dictionaries containing the attachment information,
+such as ``filename``, ``size``, ``payload``, etc. The attachment is saved to the ``output_dir``
+if specified.
+
+.. code:: python
+
+  import email
+  from unstructured.partition.email import extract_attachment_info
+
+  with open("example-docs/fake-email-attachment.eml", "r") as f:
+      msg = email.message_from_file(f)
+  attachment_info = extract_attachment_info(msg, output_dir="example-docs")
+
+For more information about the ``extract_attachment_info`` function, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/email.py>`_.
 
 
 ``is_bulleted_text``
@@ -1825,6 +2253,8 @@ Examples:
 
   # Returns False
   is_bulleted_text("I love Morse Code! ●●●")
+
+For more information about the ``is_bulleted_text`` function, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/text_type.py>`_.
 
 
 ``is_possible_narrative_text``
@@ -1871,6 +2301,8 @@ Examples:
   example_3 = "OLD MCDONALD HAD A FARM"
   is_possible_narrative_text(example_3, cap_threshold=1.0)
 
+For more information about the ``is_possible_narrative_text`` function, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/text_type.py>`_.
+
 
 ``is_possible_title``
 ---------------------
@@ -1915,51 +2347,7 @@ Examples:
   example_3 = "Make sure you brush your teeth. Do it before you go to bed."
   is_possible_title(example_3, sentence_min_length=5)
 
-
-``contains_us_phone_number``
-----------------------------
-
-Checks to see if a section of text contains a US phone number.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.partition.text_type import contains_us_phone_number
-
-  # Returns True because the text includes a phone number
-  contains_us_phone_number("Phone number: 215-867-5309")
-
-
-``contains_verb``
------------------
-
-Checks if the text contains a verb. This is used in ``is_possible_narrative_text``, but can
-be used independently as well. The function identifies verbs using the NLTK part of speech
-tagger. Text that is all upper case is lower cased before part of speech detection. This is
-because the upper case letters sometimes cause the part of speech tagger to miss verbs.
-The following part of speech tags are identified as verbs:
-
-* ``VB``
-* ``VBG``
-* ``VBD``
-* ``VBN``
-* ``VBP``
-* ``VBZ``
-
-Examples:
-
-.. code:: python
-
-  from unstructured.partition.text_type import contains_verb
-
-  # Returns True because the text contains a verb
-  example_1 = "I am going to run to the store to pick up some milk."
-  contains_verb(example_1)
-
-  # Returns False because the text does not contain a verb
-  example_2 = "A friendly dog"
-  contains_verb(example_2)
+For more information about the ``is_possible_title`` function, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/text_type.py>`_.
 
 
 ``sentence_count``
@@ -1984,46 +2372,4 @@ Examples:
   # Returns 1 because the first sentence in the example does not contain five word tokens.
   sentence_count(example, min_length=5)
 
-
-``exceeds_cap_ratio``
----------------------
-
-Determines if the section of text exceeds the specified caps ratio. Used in
-``is_possible_narrative_text`` and ``is_possible_title``, but can be used independently
-as well. You can set the caps threshold using the ``threshold`` kwarg. The threshold
-defaults to ``0.3``. Only runs on sections of text that are a single sentence. The caps ratio check does not apply to text that is all capitalized.
-
-Examples:
-
-.. code:: python
-
-  from unstructured.partition.text_type import exceeds_cap_ratio
-
-  # Returns True because the text is more than 30% caps
-  example_1 = "LOOK AT ME I AM YELLING"
-  exceeds_cap_ratio(example_1)
-
-  # Returns False because the text is less than 30% caps
-  example_2 = "Look at me, I am no longer yelling"
-  exceeds_cap_ratio(example_2)
-
-  # Returns False because the text is more than 1% caps
-  exceeds_cap_ratio(example_2, threshold=0.01)
-
-
-``extract_attachment_info``
-----------------------------
-
-The ``extract_attachment_info`` function takes an ``email.message.Message`` object
-as input and returns the a list of dictionaries containing the attachment information,
-such as ``filename``, ``size``, ``payload``, etc. The attachment is saved to the ``output_dir``
-if specified.
-
-.. code:: python
-
-  import email
-  from unstructured.partition.email import extract_attachment_info
-
-  with open("example-docs/fake-email-attachment.eml", "r") as f:
-      msg = email.message_from_file(f)
-  attachment_info = extract_attachment_info(msg, output_dir="example-docs")
+For more information about the ``sentence_count`` function, you can check the `source code here <https://github.com/Unstructured-IO/unstructured/blob/a583d47b841bdd426b9058b7c34f6aa3ed8de152/unstructured/partition/text_type.py>`_.

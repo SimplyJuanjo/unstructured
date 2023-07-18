@@ -2,9 +2,10 @@ from typing import IO, Dict, List, Optional
 
 import requests
 
-from unstructured.documents.elements import Element
+from unstructured.documents.elements import Element, process_metadata
 from unstructured.documents.html import HTMLDocument
 from unstructured.documents.xml import VALID_PARSERS
+from unstructured.file_utils.encoding import read_txt_file
 from unstructured.file_utils.file_conversion import convert_file_to_html_text
 from unstructured.file_utils.filetype import (
     FileType,
@@ -16,10 +17,11 @@ from unstructured.partition.common import (
 )
 
 
+@process_metadata()
 @add_metadata_with_filetype(FileType.HTML)
 def partition_html(
     filename: Optional[str] = None,
-    file: Optional[IO] = None,
+    file: Optional[IO[bytes]] = None,
     text: Optional[str] = None,
     url: Optional[str] = None,
     encoding: Optional[str] = None,
@@ -28,12 +30,15 @@ def partition_html(
     headers: Dict[str, str] = {},
     ssl_verify: bool = True,
     parser: VALID_PARSERS = None,
+    html_assemble_articles: bool = False,
+    metadata_filename: Optional[str] = None,
+    **kwargs,
 ) -> List[Element]:
     """Partitions an HTML document into its constituent elements.
 
     Parameters
     ----------
-     filename
+    filename
         A string defining the target filename path.
     file
         A file-like object using "r" mode --> open(filename, "r").
@@ -58,28 +63,32 @@ def partition_html(
     """
     if text is not None and text.strip() == "" and not file and not filename and not url:
         return []
-
     # Verify that only one of the arguments was provided
     exactly_one(filename=filename, file=file, text=text, url=url)
 
-    if not encoding:
-        encoding = "utf-8"
-
     if filename is not None:
-        document = HTMLDocument.from_file(filename, parser=parser, encoding=encoding)
+        document = HTMLDocument.from_file(
+            filename,
+            parser=parser,
+            encoding=encoding,
+            assemble_articles=html_assemble_articles,
+        )
 
     elif file is not None:
-        file_content = file.read()
-        if isinstance(file_content, bytes):
-            file_text = file_content.decode(encoding)
-        else:
-            file_text = file_content
-
-        document = HTMLDocument.from_string(file_text, parser=parser)
+        _, file_text = read_txt_file(file=file, encoding=encoding)
+        document = HTMLDocument.from_string(
+            file_text,
+            parser=parser,
+            assemble_articles=html_assemble_articles,
+        )
 
     elif text is not None:
         _text: str = str(text)
-        document = HTMLDocument.from_string(_text, parser=parser)
+        document = HTMLDocument.from_string(
+            _text,
+            parser=parser,
+            assemble_articles=html_assemble_articles,
+        )
 
     elif url is not None:
         response = requests.get(url, headers=headers, verify=ssl_verify)
@@ -98,8 +107,9 @@ def partition_html(
 def convert_and_partition_html(
     source_format: str,
     filename: Optional[str] = None,
-    file: Optional[IO] = None,
+    file: Optional[IO[bytes]] = None,
     include_page_breaks: bool = False,
+    metadata_filename: Optional[str] = None,
 ) -> List[Element]:
     """Converts a document to HTML and then partitions it using partition_html. Works with
     any file format support by pandoc.
@@ -112,9 +122,10 @@ def convert_and_partition_html(
         A string defining the target filename path.
     file
         A file-like object using "rb" mode --> open(filename, "rb").
-
     include_page_breaks
-        If True, the output will include page breaks if the filetype supports it
+        If True, the output will include page breaks if the filetype supports it.
+    metadata_filename
+        The filename to use in element metadata.
     """
     html_text = convert_file_to_html_text(source_format=source_format, filename=filename, file=file)
     # NOTE(robinson) - pypandoc returns a text string with unicode encoding
@@ -123,4 +134,5 @@ def convert_and_partition_html(
         text=html_text,
         include_page_breaks=include_page_breaks,
         encoding="unicode",
+        metadata_filename=metadata_filename,
     )

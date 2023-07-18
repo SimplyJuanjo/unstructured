@@ -1,15 +1,19 @@
 from typing import IO, List, Optional
 
-from unstructured.documents.elements import Element
+from unstructured.documents.elements import Element, process_metadata
 from unstructured.file_utils.filetype import FileType, add_metadata_with_filetype
 from unstructured.partition.html import convert_and_partition_html
 
 
+@process_metadata()
 @add_metadata_with_filetype(FileType.RTF)
 def partition_rtf(
     filename: Optional[str] = None,
-    file: Optional[IO] = None,
+    file: Optional[IO[bytes]] = None,
     include_page_breaks: bool = False,
+    include_metadata: bool = True,
+    metadata_filename: Optional[str] = None,
+    **kwargs,
 ) -> List[Element]:
     """Partitions an RTF document. The document is first converted to HTML and then
     partitioned using partiton_html.
@@ -28,4 +32,5 @@ def partition_rtf(
         filename=filename,
         file=file,
         include_page_breaks=include_page_breaks,
+        metadata_filename=metadata_filename,
     )

@@ -2,20 +2,34 @@ import json
 import re
 from typing import IO, List, Optional
 
-from unstructured.documents.elements import Element
+from unstructured.documents.elements import Element, process_metadata
 from unstructured.file_utils.filetype import FileType, add_metadata_with_filetype
 from unstructured.nlp.patterns import LIST_OF_DICTS_PATTERN
 from unstructured.partition.common import exactly_one
 from unstructured.staging.base import dict_to_elements
 
 
+@process_metadata()
 @add_metadata_with_filetype(FileType.JSON)
 def partition_json(
     filename: Optional[str] = None,
-    file: Optional[IO] = None,
+    file: Optional[IO[bytes]] = None,
     text: Optional[str] = None,
+    include_metadata: bool = True,
+    metadata_filename: Optional[str] = None,
+    **kwargs,
 ) -> List[Element]:
-    """Partitions an .json document into its constituent elements."""
+    """Partitions an .json document into its constituent elements.
+
+    Parameters
+    ----------
+    filename
+        A string defining the target filename path.
+    file
+        A file-like object as bytes --> open(filename, "rb").
+    text
+        The string representation of the .json document.
+    """
     if text is not None and text.strip() == "" and not file and not filename:
         return []
 

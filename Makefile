@@ -41,6 +41,9 @@ install-nltk-models:
 .PHONY: install-test
 install-test:
 	python3 -m pip install -r requirements/test.txt
+	# NOTE(robinson) - Installing weaviate-client separately here because the requests
+	# version conflicts with label_studio_sdk
+	python3 -m pip install weaviate-client
 
 .PHONY: install-dev
 install-dev:
@@ -59,6 +62,14 @@ install-ingest-google-drive:
 install-ingest-s3:
 	python3 -m pip install -r requirements/ingest-s3.txt
 
+.PHONY: install-ingest-gcs
+install-ingest-gcs:
+	python3 -m pip install -r requirements/ingest-gcs.txt
+
+.PHONY: install-ingest-dropbox
+install-ingest-dropbox:
+	python3 -m pip install -r requirements/ingest-dropbox.txt
+
 .PHONY: install-ingest-azure
 install-ingest-azure:
 	python3 -m pip install -r requirements/ingest-azure.txt
@@ -75,6 +86,10 @@ install-ingest-github:
 install-ingest-gitlab:
 	python3 -m pip install -r requirements/ingest-gitlab.txt
 
+.PHONY: install-ingest-onedrive
+install-ingest-onedrive:
+	python3 -m pip install -r requirements/ingest-onedrive.txt
+
 .PHONY: install-ingest-reddit
 install-ingest-reddit:
 	python3 -m pip install -r requirements/ingest-reddit.txt
@@ -87,49 +102,48 @@ install-ingest-slack:
 install-ingest-wikipedia:
 	python3 -m pip install -r requirements/ingest-wikipedia.txt
 
+.PHONY: install-ingest-elasticsearch
+install-ingest-elasticsearch:
+	python3 -m pip install -r requirements/ingest-elasticsearch.txt
 .PHONY: install-unstructured-inference
 install-unstructured-inference:
 	python3 -m pip install -r requirements/local-inference.txt
 
-.PHONY: install-tensorboard
-install-tensorboard:
-	@if [ ${ARCH} = "arm64" ] || [ ${ARCH} = "aarch64" ]; then\
-		python3 -m pip install tensorboard>=2.12.2;\
-	fi
-
-.PHONY: install-detectron2
-install-detectron2: install-tensorboard
-	python3 -m pip install "detectron2@git+https://github.com/facebookresearch/detectron2.git@e2ce8dc#egg=detectron2"
-
 ## install-local-inference: installs requirements for local inference
 .PHONY: install-local-inference
-install-local-inference: install install-unstructured-inference install-detectron2
+install-local-inference: install install-unstructured-inference
+
+.PHONY: install-pandoc
+install-pandoc:
+	ARCH=${ARCH} ./scripts/install-pandoc.sh
+
 
 ## pip-compile:             compiles all base/dev/test requirements
 .PHONY: pip-compile
 pip-compile:
-	pip-compile --upgrade -o requirements/base.txt
+	pip-compile --upgrade requirements/base.in
 	# Extra requirements for huggingface staging functions
-	pip-compile --upgrade --extra huggingface -o requirements/huggingface.txt
-	# NOTE(robinson) - We want the dependencies for detectron2 in the requirements.txt, but not
-	# the detectron2 repo itself. If detectron2 is in the requirements.txt file, an order of
-	# operations issue related to the torch library causes the install to fail
-	pip-compile --upgrade requirements/dev.in
+	pip-compile --upgrade requirements/huggingface.in
 	pip-compile --upgrade requirements/test.in
+	pip-compile --upgrade requirements/dev.in
 	pip-compile --upgrade requirements/build.in
-	pip-compile --upgrade --extra local-inference -o requirements/local-inference.txt
+	pip-compile --upgrade requirements/local-inference.in
 	# NOTE(robinson) - doc/requirements.txt is where the GitHub action for building
 	# sphinx docs looks for additional requirements
 	cp requirements/build.txt docs/requirements.txt
-	pip-compile --upgrade --extra=s3        --output-file=requirements/ingest-s3.txt        requirements/base.txt setup.py
-	pip-compile --upgrade --extra=azure     --output-file=requirements/ingest-azure.txt     requirements/base.txt setup.py
-	pip-compile --upgrade --extra=discord   --output-file=requirements/ingest-azure.txt     requirements/base.txt setup.py
-	pip-compile --upgrade --extra=reddit    --output-file=requirements/ingest-reddit.txt    requirements/base.txt setup.py
-	pip-compile --upgrade --extra=github    --output-file=requirements/ingest-github.txt    requirements/base.txt setup.py
-	pip-compile --upgrade --extra=gitlab    --output-file=requirements/ingest-gitlab.txt    requirements/base.txt setup.py
-	pip-compile --upgrade --extra=slack     --output-file=requirements/ingest-slack.txt     requirements/base.txt setup.py
-	pip-compile --upgrade --extra=wikipedia --output-file=requirements/ingest-wikipedia.txt requirements/base.txt setup.py
-	pip-compile --upgrade --extra=google-drive --output-file=requirements/ingest-google-drive.txt  requirements/base.txt setup.py
+	pip-compile --upgrade requirements/ingest-s3.in
+	pip-compile --upgrade requirements/ingest-gcs.in
+	pip-compile --upgrade requirements/ingest-dropbox.in
+	pip-compile --upgrade requirements/ingest-azure.in
+	pip-compile --upgrade requirements/ingest-discord.in
+	pip-compile --upgrade requirements/ingest-reddit.in
+	pip-compile --upgrade requirements/ingest-github.in
+	pip-compile --upgrade requirements/ingest-gitlab.in
+	pip-compile --upgrade requirements/ingest-slack.in
+	pip-compile --upgrade requirements/ingest-wikipedia.in
+	pip-compile --upgrade requirements/ingest-google-drive.in
+	pip-compile --upgrade requirements/ingest-elasticsearch.in
+	pip-compile --upgrade requirements/ingest-onedrive.in
 
 ## install-project-local:   install unstructured into your local python environment
 .PHONY: install-project-local
@@ -146,10 +160,12 @@ uninstall-project-local:
 # Test and Lint #
 #################
 
+export CI ?= false
+
 ## test:                    runs all unittests
 .PHONY: test
 test:
-	PYTHONPATH=. pytest test_${PACKAGE_NAME} --cov=${PACKAGE_NAME} --cov-report term-missing
+	PYTHONPATH=. CI=$(CI) pytest test_${PACKAGE_NAME} --cov=${PACKAGE_NAME} --cov-report term-missing
 
 ## check:                   runs linters (includes tests)
 .PHONY: check
@@ -198,6 +214,11 @@ version-sync:
 check-coverage:
 	coverage report --fail-under=95
 
+## check-deps:              check consistency of dependencies
+.PHONY: check-deps
+check-deps:
+	scripts/consistent-deps.sh
+
 ##########
 # Docker #
 ##########
@@ -219,9 +240,24 @@ docker-test:
 	docker run --rm \
 	-v ${CURRENT_DIR}/test_unstructured:/home/test_unstructured \
 	-v ${CURRENT_DIR}/test_unstructured_ingest:/home/test_unstructured_ingest \
+	$(if $(wildcard uns_test_env_file),--env-file uns_test_env_file,) \
 	$(DOCKER_IMAGE) \
-	bash -c "pytest $(if $(TEST_NAME),-k $(TEST_NAME),) test_unstructured"
+	bash -c "CI=$(CI) pytest $(if $(TEST_NAME),-k $(TEST_NAME),) test_unstructured"
 
 .PHONY: docker-smoke-test
 docker-smoke-test:
 	DOCKER_IMAGE=${DOCKER_IMAGE} ./scripts/docker-smoke-test.sh
+
+
+###########
+# Jupyter #
+###########
+
+.PHONY: docker-jupyter-notebook
+docker-jupyter-notebook:
+	docker run -p 8888:8888 --mount type=bind,source=$(realpath .),target=/home --entrypoint jupyter-notebook -t --rm ${DOCKER_IMAGE} --allow-root --port 8888 --ip 0.0.0.0 --NotebookApp.token='' --NotebookApp.password=''
+
+
+.PHONY: run-jupyter
+run-jupyter:
+	PYTHONPATH=$(realpath .) JUPYTER_PATH=$(realpath .) jupyter-notebook --NotebookApp.token='' --NotebookApp.password=''

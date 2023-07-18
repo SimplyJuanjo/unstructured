@@ -1,24 +1,29 @@
-"""Process aribritrary files with the Unstructured library"""
+"""Process arbitrary files with the Unstructured library"""
 
+import os
 from typing import Any, Dict, List, Optional
 
-from unstructured_inference.models.detectron2 import MODEL_TYPES
+from unstructured_inference.models.base import get_model
 
 from unstructured.ingest.interfaces import BaseIngestDoc as IngestDoc
 from unstructured.ingest.logger import logger
 
 
 def initialize():
-    """Download models (avoids subprocesses all doing the same)"""
-    # Accessing this dictionary triggers standard model downloads for pdf processing.
-    # There will be a better way to do this, see
-    # https://github.com/Unstructured-IO/unstructured-inference/issues/55
-    MODEL_TYPES[None]["model_path"]
-    MODEL_TYPES[None]["config_path"]
+    """Download default model or model specified by UNSTRUCTURED_HI_RES_MODEL_NAME environment
+    variable (avoids subprocesses all doing the same)"""
+
+    # If more than one model will be supported and left up to user selection
+    supported_model = os.environ.get("UNSTRUCTURED_HI_RES_SUPPORTED_MODEL", "")
+    if supported_model:
+        for model_name in supported_model.split(","):
+            get_model(model_name=model_name)
+
+    get_model(os.environ.get("UNSTRUCTURED_HI_RES_MODEL_NAME"))
 
 
 def process_document(doc: "IngestDoc", **partition_kwargs) -> Optional[List[Dict[str, Any]]]:
-    """Process any IngestDoc-like class of document with choosen Unstructured's partition logic.
+    """Process any IngestDoc-like class of document with chosen Unstructured's partition logic.
 
     Parameters
     ----------
