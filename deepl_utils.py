@@ -80,7 +80,7 @@ def get_deepl_code(ms_code):
         "ps": None,
         "fa": None,
         "pl": "PL",
-        "pt": "PT",
+        "pt": "PT-PT",
         "pt-pt": None,
         "pa": None,
         "otq": None,
