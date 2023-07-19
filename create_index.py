@@ -241,7 +241,7 @@ def process_data():
                 pinecone.create_index(index_name, dimension=1536, metric="cosine", pods=1, pod_type="p1.x1")
 
             vectorstore = Pinecone.from_texts([t.page_content for t in texts], embeddings, index_name=index_name, metadatas=metadatas)
-            print("Index created", vectorstore)
+            # print("Index created", vectorstore)
             print(f"Indexing done in {time.time() - pinecone_time} seconds PINECONE")
             # azure_time = time.time()
             # active_indexes = index_client.list_indexes()
@@ -356,11 +356,8 @@ def process_data():
             content_type="application/json"
         )
 
-        urlanalize_doc = request.args.get('urlanalizeDoc')
-        call_analize_doc(container_name, urlanalize_doc, doc_id, filename, index_name, user_id)
-
         # Process the PDF data
-        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
+        text_splitter = RecursiveCharacterTextSplitter(chunk_size=1400, chunk_overlap=400)
         data_2[0].page_content = completed_translation
         texts = text_splitter.split_documents(data_2)
         embeddings = OpenAIEmbeddings(openai_api_key=openai_api_key)
@@ -420,7 +417,9 @@ def process_data():
                 json.dumps(message),
                 content_type="application/json"
             )
-            
+        
+        urlanalize_doc = request.args.get('urlanalizeDoc')
+        call_analize_doc(container_name, urlanalize_doc, doc_id, filename, index_name, user_id)
 
         os.remove(temp_file_path)
         # Convertir el diccionario en una cadena JSON
