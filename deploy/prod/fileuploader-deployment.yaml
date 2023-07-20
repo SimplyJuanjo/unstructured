@@ -51,5 +51,20 @@ spec:
               secretKeyRef:
                 name: app-secrets
                 key: SERVER_URL
+          - name: TRANSLATOR_SUBSCRIPTION_KEY
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: TRANSLATOR_SUBSCRIPTION_KEY
+          - name: WEBPUBSUB_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: WEBPUBSUB_ENDPOINT
+          - name: WEBPUBSUB_KEY
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: WEBPUBSUB_KEY
           ports:
             - containerPort: 8080
