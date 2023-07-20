@@ -54,15 +54,15 @@ COPY unstructured unstructured
 
 RUN python3.8 -c "from unstructured.ingest.doc_processor.generalized import initialize; initialize()"
 
-COPY deepl_utils.py deepl_utils.py
+COPY myapp myapp
 COPY azure_utils.py azure_utils.py
-COPY create_index.py create_index.py
+COPY run.py run.py
 
 # Make port 80 available to the world outside this container
 EXPOSE 8080
 EXPOSE 443
 
-CMD ["python3.8", "create_index.py"]
+CMD ["python3.8", "run.py"]
 # CMD ["/bin/bash"]
 
 
