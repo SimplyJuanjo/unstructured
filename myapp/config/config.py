@@ -23,3 +23,6 @@ class Config(object):
     WEBPUBSUB_KEY = os.getenv('WEBPUBSUB_KEY')
 
     NODE_SERVER_URL = os.getenv('SERVER_URL')
+
+    VECTOR_STORE_ADDRESS = os.getenv('VECTOR_STORE_ADDRESS')
+    VECTOR_STORE_PASSWORD = os.getenv('VECTOR_STORE_PASSWORD')

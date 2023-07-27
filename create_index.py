@@ -15,7 +15,7 @@ from langchain.agents import AgentType
 from langchain.prompts.chat import ChatPromptTemplate, SystemMessagePromptTemplate, HumanMessagePromptTemplate, MessagesPlaceholder
 
 from deepl_utils import get_deepl_code, translate
-import azure_utils
+import myapp.utils.azure_utils as azure_utils
 
 from azure.search.documents.indexes import SearchIndexClient
 

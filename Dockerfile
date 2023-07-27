@@ -31,7 +31,8 @@ RUN python3.8 -m pip install pip==${PIP_VERSION} && \
   pip install --no-cache -r requirements/ingest-wikipedia.txt && \
   pip install --no-cache -r requirements/local-inference.txt && \
   pip install --no-cache Flask==2.2.3 && \
-  pip install --no-cache langchain==0.0.219 && \
+  pip install --no-cache langchain==0.0.245 && \
+  pip install --no-cache langchain_experimental==0.0.5 && \
   pip install --no-cache pdfminer.six && \
   pip install --no-cache pinecone-client && \
   pip install --no-cache requests && \
@@ -40,7 +41,7 @@ RUN python3.8 -m pip install pip==${PIP_VERSION} && \
   pip install --no-cache azure-storage-blob azure-identity && \
   pip install --no-cache azure-messaging-webpubsubservice && \
   pip install --no-cache deepl && \
-  pip install --index-url=https://pkgs.dev.azure.com/azure-sdk/public/_packaging/azure-sdk-for-python/pypi/simple/ azure-search-documents==11.4.0a20230509004 && \
+  pip install --no-cache azure-search-documents==11.4.0b6 && \
   dnf -y groupremove "Development Tools" && \
   dnf clean all
 
@@ -55,7 +56,6 @@ COPY unstructured unstructured
 RUN python3.8 -c "from unstructured.ingest.doc_processor.generalized import initialize; initialize()"
 
 COPY myapp myapp
-COPY azure_utils.py azure_utils.py
 COPY run.py run.py
 
 # Make port 80 available to the world outside this container

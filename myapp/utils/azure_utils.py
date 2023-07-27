@@ -1,7 +1,4 @@
 from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.schema import BaseRetriever
-from langchain.vectorstores.azuresearch import AzureSearch
-
 from azure.search.documents.indexes.models import (
     SearchableField,
     SearchField,
@@ -33,7 +30,7 @@ FIELDS = [
         name="content_vector",
         type=SearchFieldDataType.Collection(SearchFieldDataType.Single),
         searchable=True,
-        dimensions=len(embedding_function("Text")),
+        vector_search_dimensions=1536,
         vector_search_configuration="default",
     ),
     SearchableField(

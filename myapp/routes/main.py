@@ -1,6 +1,6 @@
 from flask import Blueprint, request, jsonify
 from myapp.config.config import Config
-from myapp.services.azure import AzureService
+from myapp.services.azure import AzureBlobService, AzureCognitiveService
 from myapp.services.pinecone import PineconeService
 from myapp.services.openai import OpenAIService
 from myapp.services.webpubsub import WebPubSubClientWrapper
@@ -19,7 +19,8 @@ def process_data():
         start_time = time.time()
         config = Config()
         params = ProcessDataParams.from_request(request)
-        azure_blob_service = AzureService(config.AZURE_CONNECTION_STRING, params.container_name, params.url)
+        azure_blob_service = AzureBlobService(config.AZURE_CONNECTION_STRING, params.container_name, params.url)
+        azure_cognitive_service = AzureCognitiveService(config.VECTOR_STORE_ADDRESS, config.VECTOR_STORE_PASSWORD, config.OPENAI_API_KEY)
         webpubsub_service = WebPubSubClientWrapper(config.WEBPUBSUB_ENDPOINT, config.WEBPUBSUB_KEY)
         pinecone_service = PineconeService(config.PINECONE_API_KEY, config.PINECONE_ENVIRONMENT, config.OPENAI_API_KEY)
         translator = Translator(config.MS_TRANSLATOR_SUBSCRIPTION_KEY, config.MS_TRANSLATOR_REGION, config.DEEPL_AUTH_KEY)
@@ -63,13 +64,13 @@ def process_data():
         texts, metadatas = text_processor.process_data(data=ocr_data, chunk_size=1400, chunk_overlap=400, completed_translation=ocr_translation)
 
         # Create an index if it doesn't exist
-        pinecone_service.create_index_if_none(params.index_name)
+        azure_vectorstore = azure_cognitive_service.create_index_if_none(params.index_name)
 
         # Index texts
         try:
-            pinecone_time = time.time()
-            vectorstore = pinecone_service.index_texts(texts, metadatas, params.index_name)
-            print(f"Texts indexed in Pinecone {vectorstore} in {time.time() - pinecone_time} seconds")
+            azure_time = time.time()
+            azure_cognitive_service.index_texts(texts, metadatas, azure_vectorstore)
+            print(f"Texts indexed in Azure Cognitive {azure_vectorstore} in {time.time() - azure_time} seconds")
         except Exception as e:
             message["status"] = "index creation failed"
             webpubsub_service.send_to_group(params.user_id, message)
@@ -105,9 +106,9 @@ def process_data():
 
         # Index texts
         try:
-            pinecone_time = time.time()
-            vectorstore = pinecone_service.index_texts(fast_texts, fast_metadatas, params.index_name)
-            print(f"Fast texts indexed in Pinecone {vectorstore} in {time.time() - pinecone_time} seconds")
+            azure_time = time.time()
+            azure_cognitive_service.index_texts(fast_texts, fast_metadatas, azure_vectorstore)
+            print(f"Fast texts indexed in Azure Cognitive {azure_vectorstore} in {time.time() - azure_time} seconds")
         except Exception as e:
             message["status"] = "index creation failed"
             webpubsub_service.send_to_group(params.user_id, message)
