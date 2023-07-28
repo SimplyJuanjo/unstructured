@@ -66,5 +66,15 @@ spec:
               secretKeyRef:
                 name: app-secrets
                 key: WEBPUBSUB_KEY
+          - name: VECTOR_STORE_ADDRESS
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: VECTOR_STORE_ADDRESS
+          - name: VECTOR_STORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: VECTOR_STORE_PASSWORD
           ports:
             - containerPort: 8080
