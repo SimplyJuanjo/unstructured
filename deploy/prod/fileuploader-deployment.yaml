@@ -21,16 +21,21 @@ spec:
               secretKeyRef:
                 name: app-secrets
                 key: OPENAI_API_KEY
-          - name: PINECONE_API_KEY
+          - name: OPENAI_API_TYPE
             valueFrom:
               secretKeyRef:
                 name: app-secrets
-                key: PINECONE_API_KEY
-          - name: PINECONE_ENVIRONMENT
+                key: OPENAI_API_TYPE
+          - name: OPENAI_API_VERSION
             valueFrom:
               secretKeyRef:
                 name: app-secrets
-                key: PINECONE_ENVIRONMENT
+                key: OPENAI_API_VERSION
+          - name: OPENAI_API_BASE
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: OPENAI_API_BASE
           - name: BLOBNAME
             valueFrom:
               secretKeyRef:
