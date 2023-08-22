@@ -19,12 +19,21 @@ class AzureBlobService:
 
 
 class AzureCognitiveService:
-    def __init__(self,vector_store_address, vector_store_password, openai_api_key):
+    def __init__(self,vector_store_address, vector_store_password, openai_api_key, openai_api_base, openai_api_version, openai_api_type):
         self.vector_store_address = vector_store_address
         self.vector_store_password = vector_store_password
         self.index_client = SearchIndexClient(endpoint=vector_store_address, credential=AzureKeyCredential(vector_store_password))
         self.openai_api_key = openai_api_key
-        self.embeddings = OpenAIEmbeddings(openai_api_key=self.openai_api_key)
+        self.openai_api_base = openai_api_base
+        self.openai_api_version = openai_api_version
+        self.openai_api_type = openai_api_type
+        self.embeddings = OpenAIEmbeddings(
+            openai_api_base = self.openai_api_base,
+            openai_api_version = self.openai_api_version,
+            deployment = "nav29embeddings",
+            openai_api_key = self.openai_api_key,
+            openai_api_type = self.openai_api_type,
+        )
     
     def create_index_if_none(self, index_name):
         active_indexes = self.index_client.list_indexes()

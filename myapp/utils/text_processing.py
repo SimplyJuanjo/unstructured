@@ -2,9 +2,6 @@ from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import PDFMinerLoader, UnstructuredFileLoader
 
 class TextProcessor:
-    def __init__(self, openai):
-        self.openai = openai
-
     def load_pdf(self, temp_file_path, strategy="ocr_only", ocr_languages="spa+eng", doc_id=None):
         if strategy == "ocr_only":
             kwargs = {

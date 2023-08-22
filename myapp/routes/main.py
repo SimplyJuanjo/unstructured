@@ -20,11 +20,11 @@ def process_data():
         config = Config()
         params = ProcessDataParams.from_request(request)
         azure_blob_service = AzureBlobService(config.AZURE_CONNECTION_STRING, params.container_name, params.url)
-        azure_cognitive_service = AzureCognitiveService(config.VECTOR_STORE_ADDRESS, config.VECTOR_STORE_PASSWORD, config.OPENAI_API_KEY)
+        azure_cognitive_service = AzureCognitiveService(config.VECTOR_STORE_ADDRESS, config.VECTOR_STORE_PASSWORD, config.OPENAI_API_KEY, config.OPENAI_API_BASE, config.OPENAI_API_VERSION, config.OPENAI_API_TYPE)
         webpubsub_service = WebPubSubClientWrapper(config.WEBPUBSUB_ENDPOINT, config.WEBPUBSUB_KEY)
-        pinecone_service = PineconeService(config.PINECONE_API_KEY, config.PINECONE_ENVIRONMENT, config.OPENAI_API_KEY)
+        # pinecone_service = PineconeService(config.PINECONE_API_KEY, config.PINECONE_ENVIRONMENT, config.OPENAI_API_KEY)
         translator = Translator(config.MS_TRANSLATOR_SUBSCRIPTION_KEY, config.MS_TRANSLATOR_REGION, config.DEEPL_AUTH_KEY)
-        text_processor = TextProcessor(OpenAIService(config.OPENAI_API_KEY))
+        text_processor = TextProcessor()
         node_server_caller = NodeServerCaller(config.NODE_SERVER_URL)
 
         # Start the processing
