@@ -1,8 +1,6 @@
 from flask import Blueprint, request, jsonify
 from myapp.config.config import Config
 from myapp.services.azure import AzureBlobService, AzureCognitiveService
-from myapp.services.pinecone import PineconeService
-from myapp.services.openai import OpenAIService
 from myapp.services.webpubsub import WebPubSubClientWrapper
 from myapp.utils.translation import Translator
 from myapp.utils.text_processing import TextProcessor
@@ -22,7 +20,6 @@ def process_data():
         azure_blob_service = AzureBlobService(config.AZURE_CONNECTION_STRING, params.container_name, params.url)
         azure_cognitive_service = AzureCognitiveService(config.VECTOR_STORE_ADDRESS, config.VECTOR_STORE_PASSWORD, config.OPENAI_API_KEY, config.OPENAI_API_BASE, config.OPENAI_API_VERSION, config.OPENAI_API_TYPE)
         webpubsub_service = WebPubSubClientWrapper(config.WEBPUBSUB_ENDPOINT, config.WEBPUBSUB_KEY)
-        # pinecone_service = PineconeService(config.PINECONE_API_KEY, config.PINECONE_ENVIRONMENT, config.OPENAI_API_KEY)
         translator = Translator(config.MS_TRANSLATOR_SUBSCRIPTION_KEY, config.MS_TRANSLATOR_REGION, config.DEEPL_AUTH_KEY)
         text_processor = TextProcessor()
         node_server_caller = NodeServerCaller(config.NODE_SERVER_URL)

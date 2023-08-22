@@ -6,9 +6,6 @@ class Config(object):
     OPENAI_API_BASE = os.getenv('OPENAI_API_BASE')
     OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
-    PINECONE_API_KEY = os.getenv('PINECONE_API_KEY')
-    PINECONE_ENVIRONMENT = os.getenv('PINECONE_ENVIRONMENT')
-
     BLOBNAME = os.getenv('BLOBNAME')
     BLOBKEY = os.getenv('BLOBKEY')
     BLOB = {

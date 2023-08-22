@@ -34,7 +34,6 @@ RUN python3.8 -m pip install pip==${PIP_VERSION} && \
   pip install --no-cache langchain==0.0.268 && \
   pip install --no-cache langchain_experimental==0.0.5 && \
   pip install --no-cache pdfminer.six && \
-  pip install --no-cache pinecone-client && \
   pip install --no-cache requests && \
   pip install --no-cache openai && \
   pip install --no-cache tiktoken && \
@@ -57,7 +56,6 @@ RUN python3.8 -c "from unstructured.ingest.doc_processor.generalized import init
 
 COPY myapp myapp
 COPY run.py run.py
-COPY books books
 
 # Make port 80 available to the world outside this container
 EXPOSE 8080
