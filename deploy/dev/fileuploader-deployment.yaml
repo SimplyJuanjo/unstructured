@@ -21,16 +21,21 @@ spec:
               secretKeyRef:
                 name: app-secrets
                 key: OPENAI_API_KEY
-          - name: PINECONE_API_KEY
+          - name: OPENAI_API_TYPE
             valueFrom:
               secretKeyRef:
                 name: app-secrets
-                key: PINECONE_API_KEY
-          - name: PINECONE_ENVIRONMENT
+                key: OPENAI_API_TYPE
+          - name: OPENAI_API_VERSION
             valueFrom:
               secretKeyRef:
                 name: app-secrets
-                key: PINECONE_ENVIRONMENT
+                key: OPENAI_API_VERSION
+          - name: OPENAI_API_BASE
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: OPENAI_API_BASE
           - name: BLOBNAME
             valueFrom:
               secretKeyRef:
@@ -41,5 +46,40 @@ spec:
               secretKeyRef:
                 name: app-secrets
                 key: BLOBKEY
+          - name: DEEPL_API_KEY
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: DEEPL_API_KEY
+          - name: SERVER_URL
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: SERVER_URL
+          - name: TRANSLATOR_SUBSCRIPTION_KEY
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: TRANSLATOR_SUBSCRIPTION_KEY
+          - name: WEBPUBSUB_ENDPOINT
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: WEBPUBSUB_ENDPOINT
+          - name: WEBPUBSUB_KEY
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: WEBPUBSUB_KEY
+          - name: VECTOR_STORE_ADDRESS
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: VECTOR_STORE_ADDRESS
+          - name: VECTOR_STORE_PASSWORD
+            valueFrom:
+              secretKeyRef:
+                name: app-secrets
+                key: VECTOR_STORE_PASSWORD
           ports:
             - containerPort: 8080
