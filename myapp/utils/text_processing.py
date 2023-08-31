@@ -1,8 +1,8 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.document_loaders import PDFMinerLoader, UnstructuredFileLoader
+from langchain.document_loaders import UnstructuredFileLoader
 
 class TextProcessor:
-    def load_pdf(self, temp_file_path, strategy="ocr_only", ocr_languages="spa+eng", doc_id=None):
+    def load_file(self, temp_file_path, strategy="ocr_only", ocr_languages="spa+eng", doc_id=None):
         if strategy == "ocr_only":
             kwargs = {
                 "strategy": strategy,
@@ -12,8 +12,9 @@ class TextProcessor:
             kwargs = {
                 "strategy": strategy,
             }
-        
+
         loader = UnstructuredFileLoader(temp_file_path, **kwargs)
+
         data = loader.load()
         data[0].metadata["doc_id"] = doc_id
         return data

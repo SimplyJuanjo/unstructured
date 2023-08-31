@@ -30,10 +30,12 @@ def process_data():
         print(f'Procesando index: {params.index_name}, doc_id: {params.doc_id}, doc_url: {params.url}')
 
         # Download the file
-        file_path = FileHandler.download_file(params.url)
+        print(params.filename)
+        suffix = "."+params.filename.split(".")[-1] if params.filename.split(".")[-1] != "pdf" else ".pdf"
+        file_path = FileHandler.download_file(params.url, suffix=suffix)
 
         # Extract the file
-        ocr_data = text_processor.load_pdf(file_path, strategy="ocr_only", ocr_languages="spa+eng", doc_id=params.doc_id)
+        ocr_data = text_processor.load_file(file_path, strategy="ocr_only", ocr_languages="spa+eng", doc_id=params.doc_id)
         print(f"OCR Data loaded in {time.time() - start_time} seconds")
 
         # Translate the file
@@ -77,8 +79,7 @@ def process_data():
             message["status"] = "index created, ocr"
             webpubsub_service.send_to_group(params.user_id, message)
 
-        # Extract the file fast
-        fast_data = text_processor.load_pdf(file_path, strategy="fast", doc_id=params.doc_id)
+        fast_data = text_processor.load_file(file_path, strategy="fast", doc_id=params.doc_id)
         print(f"Fast Data loaded in {time.time() - start_time} seconds")
 
         # Translate the file fast
