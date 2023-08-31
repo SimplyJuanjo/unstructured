@@ -31,8 +31,11 @@ class SimpleDropboxConfig(SimpleFsspecConfig):
     pass
 
 
+@dataclass
 class DropboxIngestDoc(FsspecIngestDoc):
-    @requires_dependencies(["dropboxdrivefs", "fsspec"])
+    registry_name: str = "dropbox"
+
+    @requires_dependencies(["dropboxdrivefs", "fsspec"], extras="dropbox")
     def get_file(self):
         super().get_file()
 
@@ -64,15 +67,13 @@ class DropboxIngestDoc(FsspecIngestDoc):
                 self.remote_file_path,
             )
         else:
-            return Path(
-                self.standard_config.download_dir,
-            ) / self.remote_file_path.replace(
+            return Path(self.standard_config.download_dir) / self.remote_file_path.replace(
                 f"/{self.config.dir_path}/",
                 "",
             )
 
 
-@requires_dependencies(["dropboxdrivefs", "fsspec"])
+@requires_dependencies(["dropboxdrivefs", "fsspec"], extras="dropbox")
 class DropboxConnector(FsspecConnector):
     ingest_doc_cls: Type[DropboxIngestDoc] = DropboxIngestDoc
 

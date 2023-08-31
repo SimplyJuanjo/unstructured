@@ -1,14 +1,16 @@
 from __future__ import annotations
 
+import os
 import subprocess
+from datetime import datetime
 from io import BufferedReader, BytesIO, TextIOWrapper
 from tempfile import SpooledTemporaryFile
 from typing import IO, TYPE_CHECKING, Any, BinaryIO, Dict, List, Optional, Tuple, Union
 
-from docx import table as docxtable
+import emoji
 from tabulate import tabulate
 
-from unstructured.documents.coordinates import CoordinateSystem
+from unstructured.documents.coordinates import CoordinateSystem, PixelSpace
 from unstructured.documents.elements import (
     TYPE_TO_TEXT_ELEMENT_MAP,
     CheckBox,
@@ -21,17 +23,51 @@ from unstructured.documents.elements import (
 )
 from unstructured.logger import logger
 from unstructured.nlp.patterns import ENUMERATED_BULLETS_RE, UNICODE_BULLETS_RE
+from unstructured.partition.utils.constants import SORT_MODE_XY_CUT
+from unstructured.utils import dependency_exists
+
+if dependency_exists("docx") and dependency_exists("docx.table"):
+    from docx.table import Table as docxtable
+
+if dependency_exists("numpy") and dependency_exists("cv2"):
+    from unstructured.partition.utils.sorting import sort_page_elements
 
 if TYPE_CHECKING:
+    from unstructured_inference.inference.layout import DocumentLayout, PageLayout
     from unstructured_inference.inference.layoutelement import (
         LayoutElement,
         LocationlessLayoutElement,
     )
 
 
+def get_last_modified_date(filename: str) -> Union[str, None]:
+    modify_date = datetime.fromtimestamp(os.path.getmtime(filename))
+    return modify_date.strftime("%Y-%m-%dT%H:%M:%S%z")
+
+
+def get_last_modified_date_from_file(
+    file: Union[IO[bytes], SpooledTemporaryFile, BinaryIO, bytes],
+) -> Union[str, None]:
+    filename = None
+    if hasattr(file, "name"):
+        filename = file.name
+
+    if not filename:
+        return None
+
+    modify_date = get_last_modified_date(filename)
+    return modify_date
+
+
 def normalize_layout_element(
-    layout_element: Union["LayoutElement", "LocationlessLayoutElement", Element, Dict[str, Any]],
+    layout_element: Union[
+        "LayoutElement",
+        "LocationlessLayoutElement",
+        Element,
+        Dict[str, Any],
+    ],
     coordinate_system: Optional[CoordinateSystem] = None,
+    infer_list_items: bool = True,
 ) -> Union[Element, List[Element]]:
     """Converts an unstructured_inference LayoutElement object to an unstructured Element."""
 
@@ -53,11 +89,19 @@ def normalize_layout_element(
     coordinates = layout_dict.get("coordinates")
     element_type = layout_dict.get("type")
     if element_type == "List":
-        return layout_list_to_list_items(
-            text,
-            coordinates=coordinates,
-            coordinate_system=coordinate_system,
-        )
+        if infer_list_items:
+            return layout_list_to_list_items(
+                text,
+                coordinates=coordinates,
+                coordinate_system=coordinate_system,
+            )
+        else:
+            return ListItem(
+                text=text,
+                coordinates=coordinates,
+                coordinate_system=coordinate_system,
+            )
+
     elif element_type in TYPE_TO_TEXT_ELEMENT_MAP:
         _element_class = TYPE_TO_TEXT_ELEMENT_MAP[element_type]
         return _element_class(
@@ -66,11 +110,23 @@ def normalize_layout_element(
             coordinate_system=coordinate_system,
         )
     elif element_type == "Checked":
-        return CheckBox(checked=True, coordinates=coordinates, coordinate_system=coordinate_system)
+        return CheckBox(
+            checked=True,
+            coordinates=coordinates,
+            coordinate_system=coordinate_system,
+        )
     elif element_type == "Unchecked":
-        return CheckBox(checked=False, coordinates=coordinates, coordinate_system=coordinate_system)
+        return CheckBox(
+            checked=False,
+            coordinates=coordinates,
+            coordinate_system=coordinate_system,
+        )
     else:
-        return Text(text=text, coordinates=coordinates, coordinate_system=coordinate_system)
+        return Text(
+            text=text,
+            coordinates=coordinates,
+            coordinate_system=coordinate_system,
+        )
 
 
 def layout_list_to_list_items(
@@ -109,6 +165,8 @@ def _add_element_metadata(
     text_as_html: Optional[str] = None,
     coordinates: Optional[Tuple[Tuple[float, float], ...]] = None,
     coordinate_system: Optional[CoordinateSystem] = None,
+    section: Optional[str] = None,
+    **kwargs,
 ) -> Element:
     """Adds document metadata to the document element. Document metadata includes information
     like the filename, source url, and page number."""
@@ -120,6 +178,24 @@ def _add_element_metadata(
         if coordinates is not None and coordinate_system is not None
         else None
     )
+    links = element.links if hasattr(element, "links") and len(element.links) > 0 else None
+    link_urls = [link.get("url") for link in links] if links else None
+    link_texts = [link.get("text") for link in links] if links else None
+    emphasized_texts = (
+        element.emphasized_texts
+        if hasattr(element, "emphasized_texts") and len(element.emphasized_texts) > 0
+        else None
+    )
+    emphasized_text_contents = (
+        [emphasized_text.get("text") for emphasized_text in emphasized_texts]
+        if emphasized_texts
+        else None
+    )
+    emphasized_text_tags = (
+        [emphasized_text.get("tag") for emphasized_text in emphasized_texts]
+        if emphasized_texts
+        else None
+    )
     metadata = ElementMetadata(
         coordinates=coordinates_metadata,
         filename=filename,
@@ -127,6 +203,11 @@ def _add_element_metadata(
         page_number=page_number,
         url=url,
         text_as_html=text_as_html,
+        link_urls=link_urls,
+        link_texts=link_texts,
+        emphasized_text_contents=emphasized_text_contents,
+        emphasized_text_tags=emphasized_text_tags,
+        section=section,
     )
     element.metadata = metadata.merge(element.metadata)
     return element
@@ -263,12 +344,12 @@ def convert_to_bytes(
     return f_bytes
 
 
-def convert_ms_office_table_to_text(table: docxtable.Table, as_html: bool = True):
+def convert_ms_office_table_to_text(table: "docxtable.Table", as_html: bool = True) -> str:
     """
     Convert a table object from a Word document to an HTML table string using the tabulate library.
 
     Args:
-        table (Table): A Table object.
+        table (Table): A docx.table.Table object.
         as_html (bool): Whether to return the table as an HTML string (True) or a
             plain text string (False)
 
@@ -277,6 +358,121 @@ def convert_ms_office_table_to_text(table: docxtable.Table, as_html: bool = True
     """
     fmt = "html" if as_html else "plain"
     rows = list(table.rows)
-    headers = [cell.text for cell in rows[0].cells]
-    data = [[cell.text for cell in row.cells] for row in rows[1:]]
-    return tabulate(data, headers=headers, tablefmt=fmt)
+    if len(rows) > 0:
+        headers = [cell.text for cell in rows[0].cells]
+        data = [[cell.text for cell in row.cells] for row in rows[1:]]
+        table_text = tabulate(data, headers=headers, tablefmt=fmt)
+    else:
+        table_text = ""
+    return table_text
+
+
+def contains_emoji(s: str) -> bool:
+    """
+    Check if the input string contains any emoji characters.
+
+    Parameters:
+    - s (str): The input string to check.
+
+    Returns:
+    - bool: True if the string contains any emoji, False otherwise.
+    """
+
+    return bool(emoji.emoji_count(s))
+
+
+def _get_page_image_metadata(
+    page: PageLayout,
+) -> dict:
+    """Retrieve image metadata and coordinate system from a page."""
+
+    image = getattr(page, "image", None)
+    image_metadata = getattr(page, "image_metadata", None)
+
+    if image:
+        image_format = image.format
+        image_width = image.width
+        image_height = image.height
+    elif image_metadata:
+        image_format = image_metadata.get("format")
+        image_width = image_metadata.get("width")
+        image_height = image_metadata.get("height")
+    else:
+        image_format = None
+        image_width = None
+        image_height = None
+
+    return {
+        "format": image_format,
+        "width": image_width,
+        "height": image_height,
+    }
+
+
+def document_to_element_list(
+    document: "DocumentLayout",
+    sortable: bool = False,
+    include_page_breaks: bool = False,
+    last_modification_date: Optional[str] = None,
+    infer_list_items: bool = True,
+    **kwargs,
+) -> List[Element]:
+    """Converts a DocumentLayout object to a list of unstructured elements."""
+    elements: List[Element] = []
+    sort_mode = kwargs.get("sort_mode", SORT_MODE_XY_CUT)
+    num_pages = len(document.pages)
+    for i, page in enumerate(document.pages):
+        page_elements: List[Element] = []
+
+        page_image_metadata = _get_page_image_metadata(page)
+        image_format = page_image_metadata.get("format")
+        image_width = page_image_metadata.get("width")
+        image_height = page_image_metadata.get("height")
+
+        for layout_element in page.elements:
+            if image_width and image_height and hasattr(layout_element, "coordinates"):
+                coordinate_system = PixelSpace(width=image_width, height=image_height)
+            else:
+                coordinate_system = None
+
+            element = normalize_layout_element(
+                layout_element,
+                coordinate_system=coordinate_system,
+                infer_list_items=infer_list_items,
+            )
+
+            if isinstance(element, List):
+                for el in element:
+                    if last_modification_date:
+                        el.metadata.last_modified = last_modification_date
+                    el.metadata.page_number = i + 1
+                page_elements.extend(element)
+                continue
+            else:
+                if last_modification_date:
+                    element.metadata.last_modified = last_modification_date
+                element.metadata.text_as_html = (
+                    layout_element.text_as_html if hasattr(layout_element, "text_as_html") else None
+                )
+                page_elements.append(element)
+            coordinates = (
+                element.metadata.coordinates.points if element.metadata.coordinates else None
+            )
+            _add_element_metadata(
+                element,
+                page_number=i + 1,
+                filetype=image_format,
+                coordinates=coordinates,
+                coordinate_system=coordinate_system,
+                **kwargs,
+            )
+
+        sorted_page_elements = page_elements
+        if sortable and sort_mode == SORT_MODE_XY_CUT:
+            sorted_page_elements = sort_page_elements(page_elements, sort_mode)
+
+        if include_page_breaks and i < num_pages - 1:
+            sorted_page_elements.append(PageBreak(text=""))
+        elements.extend(sorted_page_elements)
+
+    return elements

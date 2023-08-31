@@ -6,6 +6,7 @@ import msg_parser
 
 from unstructured.documents.elements import Element, ElementMetadata, process_metadata
 from unstructured.file_utils.filetype import FileType, add_metadata_with_filetype
+from unstructured.logger import logger
 from unstructured.partition.common import exactly_one
 from unstructured.partition.email import convert_to_iso_8601
 from unstructured.partition.html import partition_html
@@ -20,8 +21,10 @@ def partition_msg(
     max_partition: Optional[int] = 1500,
     include_metadata: bool = True,
     metadata_filename: Optional[str] = None,
+    metadata_last_modified: Optional[str] = None,
     process_attachments: bool = False,
     attachment_partitioner: Optional[Callable] = None,
+    min_partition: Optional[int] = 0,
     **kwargs,
 ) -> List[Element]:
     """Partitions a MSFT Outlook .msg file
@@ -42,6 +45,11 @@ def partition_msg(
         processing the content of the email itself.
     attachment_partitioner
         The partitioning function to use to process attachments.
+    metadata_last_modified
+        The last modified date for the document.
+    min_partition
+        The minimum number of characters to include in a partition. Only applies if
+        processing text/plain content.
     """
     exactly_one(filename=filename, file=file)
 
@@ -53,13 +61,34 @@ def partition_msg(
         tmp.close()
         msg_obj = msg_parser.MsOxMessage(tmp.name)
 
+    # NOTE(robinson) - Per RFC 2015, the content type for emails with PGP encrypted
+    # content is multipart/encrypted
+    # ref: https://www.ietf.org/rfc/rfc2015.txt
+    content_type = msg_obj.header_dict.get("Content-Type", "")
+    is_encrypted = "encrypted" in content_type
+
     text = msg_obj.body
-    if "<html>" in text or "</div>" in text:
+    elements: List[Element] = []
+    if is_encrypted:
+        logger.warning(
+            "Encrypted email detected. Partition function will return an empty list.",
+        )
+    elif text is None:
+        pass
+    elif "<html>" in text or "</div>" in text:
         elements = partition_html(text=text)
     else:
-        elements = partition_text(text=text, max_partition=max_partition)
+        elements = partition_text(
+            text=text,
+            max_partition=max_partition,
+            min_partition=min_partition,
+        )
 
-    metadata = build_msg_metadata(msg_obj, metadata_filename or filename)
+    metadata = build_msg_metadata(
+        msg_obj,
+        metadata_filename or filename,
+        metadata_last_modified=metadata_last_modified,
+    )
     for element in elements:
         element.metadata = metadata
 
@@ -73,7 +102,12 @@ def partition_msg(
                     raise ValueError(
                         "Specify the attachment_partitioner kwarg to process attachments.",
                     )
-                attached_elements = attachment_partitioner(filename=attached_filename)
+                attached_elements = attachment_partitioner(
+                    filename=attached_filename,
+                    metadata_last_modified=metadata_last_modified,
+                    max_partition=max_partition,
+                    min_partition=min_partition,
+                )
                 for element in attached_elements:
                     element.metadata.filename = attached_file
                     element.metadata.file_directory = None
@@ -83,7 +117,11 @@ def partition_msg(
     return elements
 
 
-def build_msg_metadata(msg_obj: msg_parser.MsOxMessage, filename: Optional[str]) -> ElementMetadata:
+def build_msg_metadata(
+    msg_obj: msg_parser.MsOxMessage,
+    filename: Optional[str],
+    metadata_last_modified: Optional[str],
+) -> ElementMetadata:
     """Creates an ElementMetadata object from the header information in the email."""
     email_date = getattr(msg_obj, "sent_date", None)
     if email_date is not None:
@@ -101,7 +139,7 @@ def build_msg_metadata(msg_obj: msg_parser.MsOxMessage, filename: Optional[str])
         sent_to=sent_to,
         sent_from=sent_from,
         subject=getattr(msg_obj, "subject", None),
-        date=email_date,
+        last_modified=metadata_last_modified or email_date,
         filename=filename,
     )
 
@@ -112,6 +150,9 @@ def extract_msg_attachment_info(
     output_dir: Optional[str] = None,
     msg_obj: Optional[msg_parser.MsOxMessage] = None,
 ) -> List[Dict[str, str]]:
+    """Extracts information from email message attachments and returns a list of dictionaries.
+    If 'output_dir' is provided, attachments are also saved to that directory.
+    """
     exactly_one(filename=filename, file=file, msg_obj=msg_obj)
 
     if filename is not None:

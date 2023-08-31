@@ -3,7 +3,10 @@ import pathlib
 
 import pytest
 
+from unstructured.documents.elements import NarrativeText, Title
+from unstructured.partition.json import partition_json
 from unstructured.partition.xml import partition_xml
+from unstructured.staging.base import elements_to_json
 
 DIRECTORY = pathlib.Path(__file__).parent.resolve()
 
@@ -71,8 +74,17 @@ def test_partition_xml_from_filename_with_tags_default_encoding(filename):
     file_path = os.path.join(DIRECTORY, "..", "..", "example-docs", filename)
     elements = partition_xml(filename=file_path, xml_keep_tags=True)
 
-    assert elements[5].text == "<name>United States</name>"
-    assert elements[5].metadata.filename == filename
+    assert "<leader>Joe Biden</leader>" in elements[0].text
+    assert elements[0].metadata.filename == filename
+
+
+def test_partition_xml_from_text_with_tags(filename="example-docs/factbook.xml"):
+    with open(filename) as f:
+        text = f.read()
+    elements = partition_xml(text=text, xml_keep_tags=True, metadata_filename=filename)
+
+    assert "<leader>Joe Biden</leader>" in elements[0].text
+    assert elements[0].metadata.filename == "factbook.xml"
 
 
 @pytest.mark.parametrize(
@@ -94,8 +106,8 @@ def test_partition_xml_from_file_with_tags_default_encoding(filename):
     with open(file_path) as f:
         elements = partition_xml(file=f, xml_keep_tags=True, metadata_filename=file_path)
 
-    assert elements[5].text == "<name>United States</name>"
-    assert elements[5].metadata.filename == filename
+    assert "<leader>Joe Biden</leader>" in elements[0].text
+    assert elements[0].metadata.filename == filename
 
 
 @pytest.mark.parametrize(
@@ -107,8 +119,8 @@ def test_partition_xml_from_file_rb_with_tags_default_encoding(filename):
     with open(file_path, "rb") as f:
         elements = partition_xml(file=f, xml_keep_tags=True, metadata_filename=file_path)
 
-    assert elements[5].text == "<name>United States</name>"
-    assert elements[5].metadata.filename == filename
+    assert "<leader>Joe Biden</leader>" in elements[0].text
+    assert elements[0].metadata.filename == filename
 
 
 @pytest.mark.parametrize(
@@ -156,3 +168,112 @@ def test_partition_xml_from_file_exclude_metadata(filename):
     assert elements[0].text == "United States"
     for i in range(len(elements)):
         assert elements[i].metadata.to_dict() == {}
+
+
+def test_partition_xml_metadata_date(
+    mocker,
+    filename="example-docs/factbook.xml",
+):
+    mocked_last_modification_date = "2029-07-05T09:24:28"
+
+    mocker.patch(
+        "unstructured.partition.xml.get_last_modified_date",
+        return_value=mocked_last_modification_date,
+    )
+
+    elements = partition_xml(
+        filename=filename,
+    )
+
+    assert elements[0].metadata.last_modified == mocked_last_modification_date
+
+
+def test_partition_xml_with_custom_metadata_date(
+    mocker,
+    filename="example-docs/factbook.xml",
+):
+    mocked_last_modification_date = "2029-07-05T09:24:28"
+    expected_last_modification_date = "2020-07-05T09:24:28"
+
+    mocker.patch(
+        "unstructured.partition.xml.get_last_modified_date",
+        return_value=mocked_last_modification_date,
+    )
+
+    elements = partition_xml(
+        filename=filename,
+        metadata_last_modified=expected_last_modification_date,
+    )
+
+    assert elements[0].metadata.last_modified == expected_last_modification_date
+
+
+def test_partition_xml_from_file_metadata_date(
+    mocker,
+    filename="example-docs/factbook.xml",
+):
+    mocked_last_modification_date = "2029-07-05T09:24:28"
+
+    mocker.patch(
+        "unstructured.partition.xml.get_last_modified_date_from_file",
+        return_value=mocked_last_modification_date,
+    )
+
+    with open(filename, "rb") as f:
+        elements = partition_xml(
+            file=f,
+        )
+
+    assert elements[0].metadata.last_modified == mocked_last_modification_date
+
+
+def test_partition_xml_from_file_with_custom_metadata_date(
+    mocker,
+    filename="example-docs/factbook.xml",
+):
+    mocked_last_modification_date = "2029-07-05T09:24:28"
+    expected_last_modification_date = "2020-07-05T09:24:28"
+
+    mocker.patch(
+        "unstructured.partition.xml.get_last_modified_date_from_file",
+        return_value=mocked_last_modification_date,
+    )
+
+    with open(filename, "rb") as f:
+        elements = partition_xml(file=f, metadata_last_modified=expected_last_modification_date)
+
+    assert elements[0].metadata.last_modified == expected_last_modification_date
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["factbook.xml", "factbook-utf-16.xml"],
+)
+def test_partition_xml_with_json(filename):
+    file_path = os.path.join(DIRECTORY, "..", "..", "example-docs", filename)
+    elements = partition_xml(filename=file_path, xml_keep_tags=False)
+    test_elements = partition_json(text=elements_to_json(elements))
+
+    assert len(elements) == len(test_elements)
+    assert elements[0].metadata.page_number == test_elements[0].metadata.page_number
+    assert elements[0].metadata.filename == test_elements[0].metadata.filename
+
+    for i in range(len(elements)):
+        assert elements[i] == test_elements[i]
+
+
+def test_partition_xml_with_narrative_line_breaks():
+    xml_text = """<xml>
+        <parrot>
+            <name>Conure</name>
+            <description>A conure is a very friendly bird.
+            Conures are feathery and like to dance.
+            </description>
+        </parrot>
+    </xml>"""
+
+    elements = partition_xml(text=xml_text)
+    assert elements[0] == Title("Conure")
+    assert isinstance(elements[1], NarrativeText)
+    assert str(elements[1]).startswith("A conure is a very friendly bird.")
+    assert str(elements[1]).strip().endswith("Conures are feathery and like to dance.")

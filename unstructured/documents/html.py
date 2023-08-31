@@ -15,6 +15,8 @@ from unstructured.documents.base import Page
 from unstructured.documents.elements import (
     Address,
     Element,
+    EmailAddress,
+    Link,
     ListItem,
     NarrativeText,
     Text,
@@ -24,6 +26,7 @@ from unstructured.documents.xml import VALID_PARSERS, XMLDocument
 from unstructured.logger import logger
 from unstructured.partition.text_type import (
     is_bulleted_text,
+    is_email_address,
     is_possible_narrative_text,
     is_possible_title,
     is_us_city_state_zip,
@@ -36,6 +39,7 @@ TABLE_TAGS: Final[List[str]] = ["table", "tbody", "td", "tr"]
 PAGEBREAK_TAGS: Final[List[str]] = ["hr"]
 HEADER_OR_FOOTER_TAGS: Final[List[str]] = ["header", "footer"]
 EMPTY_TAGS: Final[List[str]] = ["br", "hr"]
+SECTION_TAGS: Final[List[str]] = ["div", "pre"]
 
 
 class TagsMixin:
@@ -46,6 +50,8 @@ class TagsMixin:
         *args,
         tag: Optional[str] = None,
         ancestortags: Sequence[str] = (),
+        links: Sequence[Link] = [],
+        emphasized_texts: Sequence[dict] = [],
         **kwargs,
     ):
         if tag is None:
@@ -53,6 +59,8 @@ class TagsMixin:
         else:
             self.tag = tag
         self.ancestortags = ancestortags
+        self.links = links
+        self.emphasized_texts = emphasized_texts
         super().__init__(*args, **kwargs)
 
 
@@ -64,6 +72,12 @@ class HTMLText(TagsMixin, Text):
 
 class HTMLAddress(TagsMixin, Address):
     """Address with tag information."""
+
+    pass
+
+
+class HTMLEmailAddress(TagsMixin, EmailAddress):
+    """EmailAddress with tag information"""
 
     pass
 
@@ -128,7 +142,9 @@ class HTMLDocument(XMLDocument):
                         descendanttag_elems = tuple(tag_elem.iterdescendants())
 
                 elif _is_container_with_text(tag_elem):
-                    element = _text_to_element(tag_elem.text, "div", ())
+                    links = _get_links_from_tag(tag_elem)
+                    emphasized_texts = _get_emphasized_texts_from_tag(tag_elem)
+                    element = _text_to_element(tag_elem.text, "div", (), links, emphasized_texts)
                     if element is not None:
                         page.elements.append(element)
 
@@ -215,6 +231,40 @@ class HTMLDocument(XMLDocument):
             return out
 
 
+def _get_links_from_tag(tag_elem: etree.Element) -> List[Link]:
+    links: List[Link] = []
+    href = tag_elem.get("href")
+    if href:
+        links.append({"text": tag_elem.text, "url": href})
+
+    for tag in tag_elem.iterdescendants():
+        href = tag.get("href")
+        if href:
+            links.append({"text": tag.text, "url": href})
+    return links
+
+
+def _get_emphasized_texts_from_tag(tag_elem: etree.Element) -> List[dict]:
+    """Get emphasized texts enclosed in <strong>, <em>, <span>, <b>, <i> tags
+    from a tag element in HTML"""
+    emphasized_texts = []
+    tags_to_track = ["strong", "em", "span", "b", "i"]
+    if tag_elem is None:
+        return []
+
+    if tag_elem.tag in tags_to_track:
+        text = _construct_text(tag_elem, False)
+        if text:
+            emphasized_texts.append({"text": text, "tag": tag_elem.tag})
+
+    for descendant_tag_elem in tag_elem.iterdescendants(*tags_to_track):
+        text = _construct_text(descendant_tag_elem, False)
+        if text:
+            emphasized_texts.append({"text": text, "tag": descendant_tag_elem.tag})
+
+    return emphasized_texts
+
+
 def _parse_tag(
     tag_elem: etree.Element,
 ) -> Optional[Element]:
@@ -223,32 +273,79 @@ def _parse_tag(
     processing the document tree again. In the future we might want to keep descendants too,
     but we don't have a use for them at the moment."""
     ancestortags: Tuple[str, ...] = tuple(el.tag for el in tag_elem.iterancestors())[::-1]
+    links = _get_links_from_tag(tag_elem)
+    emphasized_texts = _get_emphasized_texts_from_tag(tag_elem)
+
     if tag_elem.tag == "script":
         return None
     text = _construct_text(tag_elem)
     if not text:
         return None
-    return _text_to_element(text, tag_elem.tag, ancestortags)
+    return _text_to_element(
+        text,
+        tag_elem.tag,
+        ancestortags,
+        links=links,
+        emphasized_texts=emphasized_texts,
+    )
 
 
-def _text_to_element(text: str, tag: str, ancestortags: Tuple[str, ...]) -> Optional[Element]:
+def _text_to_element(
+    text: str,
+    tag: str,
+    ancestortags: Tuple[str, ...],
+    links: List[Link] = [],
+    emphasized_texts: List[dict] = [],
+) -> Optional[Element]:
     """Given the text of an element, the tag type and the ancestor tags, produces the appropriate
     HTML element."""
     if is_bulleted_text(text):
         if not clean_bullets(text):
             return None
-        return HTMLListItem(text=clean_bullets(text), tag=tag, ancestortags=ancestortags)
+        return HTMLListItem(
+            text=clean_bullets(text),
+            tag=tag,
+            ancestortags=ancestortags,
+            links=links,
+            emphasized_texts=emphasized_texts,
+        )
     elif is_us_city_state_zip(text):
-        return HTMLAddress(text=text, tag=tag, ancestortags=ancestortags)
+        return HTMLAddress(
+            text=text,
+            tag=tag,
+            ancestortags=ancestortags,
+            links=links,
+            emphasized_texts=emphasized_texts,
+        )
+    elif is_email_address(text):
+        return HTMLEmailAddress(text=text, tag=tag, links=links, emphasized_texts=emphasized_texts)
 
     if len(text) < 2:
         return None
     elif is_narrative_tag(text, tag):
-        return HTMLNarrativeText(text, tag=tag, ancestortags=ancestortags)
+        return HTMLNarrativeText(
+            text,
+            tag=tag,
+            ancestortags=ancestortags,
+            links=links,
+            emphasized_texts=emphasized_texts,
+        )
     elif is_possible_title(text):
-        return HTMLTitle(text, tag=tag, ancestortags=ancestortags)
+        return HTMLTitle(
+            text,
+            tag=tag,
+            ancestortags=ancestortags,
+            links=links,
+            emphasized_texts=emphasized_texts,
+        )
     else:
-        return HTMLText(text, tag=tag, ancestortags=ancestortags)
+        return HTMLText(
+            text,
+            tag=tag,
+            ancestortags=ancestortags,
+            links=links,
+            emphasized_texts=emphasized_texts,
+        )
 
 
 def _is_container_with_text(tag_elem: etree.Element) -> bool:
@@ -260,7 +357,7 @@ def _is_container_with_text(tag_elem: etree.Element) -> bool:
         <div>Please read my message!</div>
     </div>
     """
-    if tag_elem.tag != "div" or len(tag_elem) == 0:
+    if tag_elem.tag not in SECTION_TAGS or len(tag_elem) == 0:
         return False
 
     if tag_elem.text is None or tag_elem.text.strip() == "":
@@ -274,14 +371,14 @@ def is_narrative_tag(text: str, tag: str) -> bool:
     return tag not in HEADING_TAGS and is_possible_narrative_text(text)
 
 
-def _construct_text(tag_elem: etree.Element) -> str:
+def _construct_text(tag_elem: etree.Element, include_tail_text: bool = True) -> str:
     """Extracts text from a text tag element."""
     text = ""
     for item in tag_elem.itertext():
         if item:
             text += item
 
-    if tag_elem.tail:
+    if include_tail_text and tag_elem.tail:
         text = text + tag_elem.tail
 
     text = replace_unicode_quotes(text)
@@ -303,7 +400,7 @@ def _is_text_tag(tag_elem: etree.Element, max_predecessor_len: int = 5) -> bool:
     # NOTE(robinson) - This indicates that a div tag has no children. If that's the
     # case and the tag has text, its potential a text tag
     children = tag_elem.getchildren()
-    if tag_elem.tag == "div" and len(children) == 0:
+    if tag_elem.tag in SECTION_TAGS and len(children) == 0:
         return True
 
     if _has_adjacent_bulleted_spans(tag_elem, children):
@@ -321,9 +418,19 @@ def _process_list_item(
     we can skip processing if bullets are found in a div element."""
     if tag_elem.tag in LIST_ITEM_TAGS:
         text = _construct_text(tag_elem)
-        return HTMLListItem(text=text, tag=tag_elem.tag), tag_elem
+        links = _get_links_from_tag(tag_elem)
+        emphasized_texts = _get_emphasized_texts_from_tag(tag_elem)
+        return (
+            HTMLListItem(
+                text=text,
+                tag=tag_elem.tag,
+                links=links,
+                emphasized_texts=emphasized_texts,
+            ),
+            tag_elem,
+        )
 
-    elif tag_elem.tag == "div":
+    elif tag_elem.tag in SECTION_TAGS:
         text = _construct_text(tag_elem)
         next_element = tag_elem.getnext()
         if next_element is None:
@@ -351,7 +458,7 @@ def _get_bullet_descendants(element, next_element) -> Tuple[etree.Element, ...]:
 def is_list_item_tag(tag_elem: etree.Element) -> bool:
     """Checks to see if a tag contains bulleted text."""
     if tag_elem.tag in LIST_ITEM_TAGS or (
-        tag_elem.tag == "div" and is_bulleted_text(_construct_text(tag_elem))
+        tag_elem.tag in SECTION_TAGS and is_bulleted_text(_construct_text(tag_elem))
     ):
         return True
     return False
@@ -388,7 +495,7 @@ def _is_bulleted_table(tag_elem) -> bool:
 def _has_adjacent_bulleted_spans(tag_elem: etree.Element, children: List[etree.Element]) -> bool:
     """Checks to see if a div contains two or more adjacent spans beginning with a bullet. If
     this is the case, it is treated as a single bulleted text element."""
-    if tag_elem.tag == "div":
+    if tag_elem.tag in SECTION_TAGS:
         all_spans = all(child.tag == "span" for child in children)
         _is_bulleted = children[0].text is not None and is_bulleted_text(children[0].text)
         if all_spans and _is_bulleted:

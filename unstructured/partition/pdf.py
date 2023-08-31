@@ -11,7 +11,7 @@ from pdfminer.layout import LTContainer, LTImage, LTItem, LTTextBox
 from pdfminer.utils import open_filename
 
 from unstructured.cleaners.core import clean_extra_whitespace
-from unstructured.documents.coordinates import PixelSpace
+from unstructured.documents.coordinates import PixelSpace, PointSpace
 from unstructured.documents.elements import (
     CoordinatesMetadata,
     Element,
@@ -24,16 +24,20 @@ from unstructured.documents.elements import (
 from unstructured.file_utils.filetype import (
     FileType,
     add_metadata_with_filetype,
-    document_to_element_list,
 )
 from unstructured.nlp.patterns import PARAGRAPH_PATTERN
 from unstructured.partition.common import (
     convert_to_bytes,
+    document_to_element_list,
     exactly_one,
+    get_last_modified_date,
+    get_last_modified_date_from_file,
     spooled_to_bytes_io_if_needed,
 )
 from unstructured.partition.strategies import determine_pdf_or_image_strategy
 from unstructured.partition.text import element_from_text, partition_text
+from unstructured.partition.utils.constants import SORT_MODE_BASIC, SORT_MODE_XY_CUT
+from unstructured.partition.utils.sorting import sort_page_elements
 from unstructured.utils import requires_dependencies
 
 RE_MULTISPACE_INCLUDING_NEWLINES = re.compile(pattern=r"\s+", flags=re.DOTALL)
@@ -49,8 +53,10 @@ def partition_pdf(
     infer_table_structure: bool = False,
     ocr_languages: str = "eng",
     max_partition: Optional[int] = 1500,
+    min_partition: Optional[int] = 0,
     include_metadata: bool = True,
     metadata_filename: Optional[str] = None,
+    metadata_last_modified: Optional[str] = None,
     **kwargs,
 ) -> List[Element]:
     """Parses a pdf document into a list of interpreted elements.
@@ -81,6 +87,11 @@ def partition_pdf(
     max_partition
         The maximum number of characters to include in a partition. If None is passed,
         no maximum is applied. Only applies to the "ocr_only" strategy.
+    min_partition
+        The minimum number of characters to include in a partition. Only applies if
+        processing text/plain content.
+    metadata_last_modified
+        The last modified date for the document.
     """
     exactly_one(filename=filename, file=file)
     return partition_pdf_or_image(
@@ -91,6 +102,8 @@ def partition_pdf(
         infer_table_structure=infer_table_structure,
         ocr_languages=ocr_languages,
         max_partition=max_partition,
+        min_partition=min_partition,
+        metadata_last_modified=metadata_last_modified,
         **kwargs,
     )
 
@@ -99,12 +112,28 @@ def extractable_elements(
     filename: str = "",
     file: Optional[Union[bytes, BinaryIO, SpooledTemporaryFile]] = None,
     include_page_breaks: bool = False,
+    metadata_last_modified: Optional[str] = None,
+    **kwargs,
 ):
     return _partition_pdf_with_pdfminer(
         filename=filename,
         file=file,
         include_page_breaks=include_page_breaks,
+        metadata_last_modified=metadata_last_modified,
+        **kwargs,
     )
+
+
+def get_the_last_modification_date_pdf_or_img(
+    file: Optional[Union[bytes, BinaryIO, SpooledTemporaryFile]] = None,
+    filename: Optional[str] = "",
+) -> Union[str, None]:
+    last_modification_date = None
+    if not file and filename:
+        last_modification_date = get_last_modified_date(filename=filename)
+    elif not filename and file:
+        last_modification_date = get_last_modified_date_from_file(file=file)
+    return last_modification_date
 
 
 def partition_pdf_or_image(
@@ -116,6 +145,8 @@ def partition_pdf_or_image(
     infer_table_structure: bool = False,
     ocr_languages: str = "eng",
     max_partition: Optional[int] = 1500,
+    min_partition: Optional[int] = 0,
+    metadata_last_modified: Optional[str] = None,
     **kwargs,
 ) -> List[Element]:
     """Parses a pdf or image document into a list of interpreted elements."""
@@ -124,11 +155,28 @@ def partition_pdf_or_image(
     # that task so as routing design changes, those changes are implemented in a single
     # function.
 
-    if not is_image:
+    last_modification_date = get_the_last_modification_date_pdf_or_img(
+        file=file,
+        filename=filename,
+    )
+
+    if (
+        not is_image
+        and determine_pdf_or_image_strategy(
+            strategy,
+            filename=filename,
+            file=file,
+            is_image=is_image,
+            infer_table_structure=infer_table_structure,
+        )
+        != "ocr_only"
+    ):
         extracted_elements = extractable_elements(
             filename=filename,
             file=spooled_to_bytes_io_if_needed(file),
             include_page_breaks=include_page_breaks,
+            metadata_last_modified=metadata_last_modified or last_modification_date,
+            **kwargs,
         )
         pdf_text_extractable = any(
             isinstance(el, Text) and el.text.strip() for el in extracted_elements
@@ -156,6 +204,8 @@ def partition_pdf_or_image(
                 infer_table_structure=infer_table_structure,
                 include_page_breaks=include_page_breaks,
                 ocr_languages=ocr_languages,
+                ocr_mode="entire_page",
+                metadata_last_modified=metadata_last_modified or last_modification_date,
                 **kwargs,
             )
 
@@ -172,6 +222,8 @@ def partition_pdf_or_image(
                 ocr_languages=ocr_languages,
                 is_image=is_image,
                 max_partition=max_partition,
+                min_partition=min_partition,
+                metadata_last_modified=metadata_last_modified or last_modification_date,
             )
 
     return layout_elements
@@ -185,48 +237,53 @@ def _partition_pdf_or_image_local(
     infer_table_structure: bool = False,
     include_page_breaks: bool = False,
     ocr_languages: str = "eng",
+    ocr_mode: str = "entire_page",
     model_name: Optional[str] = None,
+    metadata_last_modified: Optional[str] = None,
     **kwargs,
 ) -> List[Element]:
     """Partition using package installed locally."""
-    try:
-        from unstructured_inference.inference.layout import (
-            process_data_with_model,
-            process_file_with_model,
-        )
-    except ModuleNotFoundError as e:
-        raise Exception(
-            "unstructured_inference module not found... try running pip install "
-            "unstructured[local-inference] if you installed the unstructured library as a package. "
-            "If you cloned the unstructured repository, try running make install-local-inference "
-            "from the root directory of the repository.",
-        ) from e
-    except ImportError as e:
-        raise Exception(
-            "There was a problem importing unstructured_inference module - it may not be installed "
-            "correctly... try running pip install unstructured[local-inference] if you installed "
-            "the unstructured library as a package. If you cloned the unstructured repository, try "
-            "running make install-local-inference from the root directory of the repository.",
-        ) from e
+    from unstructured_inference.inference.layout import (
+        process_data_with_model,
+        process_file_with_model,
+    )
 
     model_name = model_name if model_name else os.environ.get("UNSTRUCTURED_HI_RES_MODEL_NAME")
     if file is None:
+        pdf_image_dpi = kwargs.pop("pdf_image_dpi", None)
+        process_file_with_model_kwargs = {
+            "is_image": is_image,
+            "ocr_languages": ocr_languages,
+            "ocr_mode": ocr_mode,
+            "extract_tables": infer_table_structure,
+            "model_name": model_name,
+        }
+        if pdf_image_dpi:
+            process_file_with_model_kwargs["pdf_image_dpi"] = pdf_image_dpi
         layout = process_file_with_model(
             filename,
-            is_image=is_image,
-            ocr_languages=ocr_languages,
-            extract_tables=infer_table_structure,
-            model_name=model_name,
+            **process_file_with_model_kwargs,
         )
     else:
         layout = process_data_with_model(
             file,
             is_image=is_image,
             ocr_languages=ocr_languages,
+            ocr_mode=ocr_mode,
             extract_tables=infer_table_structure,
             model_name=model_name,
         )
-    elements = document_to_element_list(layout, include_page_breaks=include_page_breaks, sort=False)
+    elements = document_to_element_list(
+        layout,
+        sortable=True,
+        include_page_breaks=include_page_breaks,
+        last_modification_date=metadata_last_modified,
+        # NOTE(crag): do not attempt to derive ListItem's from a layout-recognized "List"
+        # block with NLP rules. Otherwise, the assumptions in
+        # unstructured.partition.common::layout_list_to_list_items often result in weird chunking.
+        infer_list_items=False,
+        **kwargs,
+    )
     out_elements = []
 
     for el in elements:
@@ -238,7 +295,11 @@ def _partition_pdf_or_image_local(
             continue
         # NOTE(crag): this is probably always a Text object, but check for the sake of typing
         if isinstance(el, Text):
-            el.text = re.sub(RE_MULTISPACE_INCLUDING_NEWLINES, " ", el.text or "").strip()
+            el.text = re.sub(
+                RE_MULTISPACE_INCLUDING_NEWLINES,
+                " ",
+                el.text or "",
+            ).strip()
             if el.text or isinstance(el, PageBreak):
                 out_elements.append(cast(Element, el))
 
@@ -250,6 +311,8 @@ def _partition_pdf_with_pdfminer(
     filename: str = "",
     file: Optional[BinaryIO] = None,
     include_page_breaks: bool = False,
+    metadata_last_modified: Optional[str] = None,
+    **kwargs,
 ) -> List[Element]:
     """Partitions a PDF using PDFMiner instead of using a layoutmodel. Used for faster
     processing or detectron2 is not available.
@@ -267,6 +330,8 @@ def _partition_pdf_with_pdfminer(
                 fp=fp,
                 filename=filename,
                 include_page_breaks=include_page_breaks,
+                metadata_last_modified=metadata_last_modified,
+                **kwargs,
             )
 
     elif file:
@@ -275,6 +340,8 @@ def _partition_pdf_with_pdfminer(
             fp=fp,
             filename=filename,
             include_page_breaks=include_page_breaks,
+            metadata_last_modified=metadata_last_modified,
+            **kwargs,
         )
 
     return elements
@@ -303,9 +370,12 @@ def _process_pdfminer_pages(
     fp: BinaryIO,
     filename: str = "",
     include_page_breaks: bool = False,
+    metadata_last_modified: Optional[str] = None,
+    **kwargs,
 ):
     """Uses PDF miner to split a document into pages and process them."""
     elements: List[Element] = []
+    sort_mode = kwargs.get("sort_mode", SORT_MODE_XY_CUT)
 
     for i, page in enumerate(extract_pages(fp)):  # type: ignore
         width, height = page.width, page.height
@@ -345,17 +415,13 @@ def _process_pdfminer_pages(
                         filename=filename,
                         page_number=i + 1,
                         coordinates=coordinates_metadata,
+                        last_modified=metadata_last_modified,
                     )
                     page_elements.append(element)
 
-        sorted_page_elements = sorted(
-            page_elements,
-            key=lambda el: (
-                el.metadata.coordinates.points[0][1] if el.metadata.coordinates else float("inf"),
-                el.metadata.coordinates.points[0][0] if el.metadata.coordinates else float("inf"),
-                el.id,
-            ),
-        )
+        sorted_page_elements = sort_page_elements(page_elements, SORT_MODE_BASIC)
+        if sort_mode != SORT_MODE_BASIC:
+            sorted_page_elements = sort_page_elements(sorted_page_elements, sort_mode)
         elements += sorted_page_elements
 
         if include_page_breaks:
@@ -398,6 +464,67 @@ def convert_pdf_to_images(
             yield image
 
 
+def add_pytesseract_bbox_to_elements(elements, bboxes, width, height):
+    """
+    Get the bounding box of each element and add it to element.metadata.coordinates
+
+    Args:
+        elements: elements containing text detected by pytesseract.image_to_string.
+        bboxes (str): The return value of pytesseract.image_to_boxes.
+    """
+    # (NOTE) jennings: This function was written with pytesseract in mind, but
+    # paddle returns similar values via `ocr.ocr(img)`.
+    # See more at issue #1176: https://github.com/Unstructured-IO/unstructured/issues/1176
+    min_x = float("inf")
+    min_y = float("inf")
+    max_x = 0
+    max_y = 0
+    point_space = PointSpace(
+        width=width,
+        height=height,
+    )
+    pixel_space = PixelSpace(
+        width=width,
+        height=height,
+    )
+
+    boxes = bboxes.strip().split("\n")
+    i = 0
+    for element in elements:
+        char_count = len(element.text.replace(" ", ""))
+
+        for box in boxes[i : i + char_count]:  # noqa
+            _, x1, y1, x2, y2, _ = box.split()
+            x1, y1, x2, y2 = map(int, [x1, y1, x2, y2])
+
+            min_x = min(min_x, x1)
+            min_y = min(min_y, y1)
+            max_x = max(max_x, x2)
+            max_y = max(max_y, y2)
+
+        points = ((min_x, min_y), (min_x, max_y), (max_x, max_y), (max_x, min_y))
+        converted_points = tuple(
+            [
+                point_space.convert_coordinates_to_new_system(pixel_space, *point)
+                for point in points
+            ],
+        )
+
+        element.metadata.coordinates = CoordinatesMetadata(
+            points=converted_points,
+            system=pixel_space,
+        )
+
+        # reset for next element
+        min_x = float("inf")
+        min_y = float("inf")
+        max_x = 0
+        max_y = 0
+        i += char_count
+
+    return elements
+
+
 @requires_dependencies("pytesseract")
 def _partition_pdf_or_image_with_ocr(
     filename: str = "",
@@ -406,8 +533,10 @@ def _partition_pdf_or_image_with_ocr(
     ocr_languages: str = "eng",
     is_image: bool = False,
     max_partition: Optional[int] = 1500,
+    min_partition: Optional[int] = 0,
+    metadata_last_modified: Optional[str] = None,
 ):
-    """Partitions and image or PDF using Tesseract OCR. For PDFs, each page is converted
+    """Partitions an image or PDF using Tesseract OCR. For PDFs, each page is converted
     to an image prior to processing."""
     import pytesseract
 
@@ -415,22 +544,47 @@ def _partition_pdf_or_image_with_ocr(
         if file is not None:
             image = PIL.Image.open(file)
             text = pytesseract.image_to_string(image, config=f"-l '{ocr_languages}'")
+            bboxes = pytesseract.image_to_boxes(image, config=f"-l '{ocr_languages}'")
         else:
+            image = PIL.Image.open(filename)
             text = pytesseract.image_to_string(filename, config=f"-l '{ocr_languages}'")
-        elements = partition_text(text=text, max_partition=max_partition)
+            bboxes = pytesseract.image_to_boxes(filename, config=f"-l '{ocr_languages}'")
+        elements = partition_text(
+            text=text,
+            max_partition=max_partition,
+            min_partition=min_partition,
+            metadata_last_modified=metadata_last_modified,
+        )
+        width, height = image.size
+        add_pytesseract_bbox_to_elements(elements, bboxes, width, height)
+
     else:
         elements = []
         page_number = 0
         for image in convert_pdf_to_images(filename, file):
             page_number += 1
-            metadata = ElementMetadata(filename=filename, page_number=page_number)
-            text = pytesseract.image_to_string(image, config=f"-l '{ocr_languages}'")
+            metadata = ElementMetadata(
+                filename=filename,
+                page_number=page_number,
+                last_modified=metadata_last_modified,
+            )
+            _text = pytesseract.image_to_string(image, config=f"-l '{ocr_languages}'")
+            _bboxes = pytesseract.image_to_boxes(image, config=f"-l '{ocr_languages}'")
+            width, height = image.size
 
-            _elements = partition_text(text=text, max_partition=max_partition)
+            _elements = partition_text(
+                text=_text,
+                max_partition=max_partition,
+                min_partition=min_partition,
+            )
+
+            # FIXME (yao): do not save duplicated info?
             for element in _elements:
                 element.metadata = metadata
-                elements.append(element)
 
+            add_pytesseract_bbox_to_elements(_elements, _bboxes, width, height)
+
+            elements.extend(_elements)
             if include_page_breaks:
                 elements.append(PageBreak(text=""))
     return elements

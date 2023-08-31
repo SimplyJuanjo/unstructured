@@ -4,7 +4,7 @@ import os
 from dataclasses import dataclass
 from mimetypes import guess_extension
 from pathlib import Path
-from typing import Dict
+from typing import TYPE_CHECKING, Dict, Optional
 
 from unstructured.file_utils.filetype import EXT_TO_FILETYPE
 from unstructured.file_utils.google_filetype import GOOGLE_DRIVE_EXPORT_TYPES
@@ -12,15 +12,26 @@ from unstructured.ingest.interfaces import (
     BaseConnector,
     BaseConnectorConfig,
     BaseIngestDoc,
+    BaseSessionHandle,
+    ConfigSessionHandleMixin,
     ConnectorCleanupMixin,
     IngestDocCleanupMixin,
+    IngestDocSessionHandleMixin,
     StandardConnectorConfig,
 )
 from unstructured.ingest.logger import logger
 from unstructured.utils import requires_dependencies
 
+if TYPE_CHECKING:
+    from googleapiclient.discovery import Resource as GoogleAPIResource
+
 FILE_FORMAT = "{id}-{name}{ext}"
 DIRECTORY_FORMAT = "{id}-{name}"
+
+
+@dataclass
+class GoogleDriveSessionHandle(BaseSessionHandle):
+    service: "GoogleAPIResource"
 
 
 @requires_dependencies(["googleapiclient"], extras="google-drive")
@@ -65,29 +76,35 @@ def create_service_account_object(key_path, id=None):
 
 
 @dataclass
-class SimpleGoogleDriveConfig(BaseConnectorConfig):
+class SimpleGoogleDriveConfig(ConfigSessionHandleMixin, BaseConnectorConfig):
     """Connector config where drive_id is the id of the document to process or
     the folder to process all documents from."""
 
     # Google Drive Specific Options
     drive_id: str
     service_account_key: str
-    extension: str
+    extension: Optional[str]
     recursive: bool = False
 
     def __post_init__(self):
-        if self.extension and self.extension not in EXT_TO_FILETYPE.keys():
+        if self.extension and self.extension not in EXT_TO_FILETYPE:
             raise ValueError(
                 f"Extension not supported. "
                 f"Value MUST be one of {', '.join([k for k in EXT_TO_FILETYPE if k is not None])}.",
             )
-        self.service = create_service_account_object(self.service_account_key, self.drive_id)
+
+    def create_session_handle(
+        self,
+    ) -> GoogleDriveSessionHandle:
+        service = create_service_account_object(self.service_account_key)
+        return GoogleDriveSessionHandle(service=service)
 
 
 @dataclass
-class GoogleDriveIngestDoc(IngestDocCleanupMixin, BaseIngestDoc):
+class GoogleDriveIngestDoc(IngestDocSessionHandleMixin, IngestDocCleanupMixin, BaseIngestDoc):
     config: SimpleGoogleDriveConfig
-    file_meta: Dict
+    file_meta: Dict[str, str]
+    registry_name: str = "google_drive"
 
     @property
     def filename(self):
@@ -103,8 +120,6 @@ class GoogleDriveIngestDoc(IngestDocCleanupMixin, BaseIngestDoc):
         from googleapiclient.errors import HttpError
         from googleapiclient.http import MediaIoBaseDownload
 
-        self.config.service = create_service_account_object(self.config.service_account_key)
-
         if self.file_meta.get("mimeType", "").startswith("application/vnd.google-apps"):
             export_mime = GOOGLE_DRIVE_EXPORT_TYPES.get(
                 self.file_meta.get("mimeType"),  # type: ignore
@@ -117,12 +132,12 @@ class GoogleDriveIngestDoc(IngestDocCleanupMixin, BaseIngestDoc):
                 )
                 return
 
-            request = self.config.service.files().export_media(
+            request = self.session_handle.service.files().export_media(
                 fileId=self.file_meta.get("id"),
                 mimeType=export_mime,
             )
         else:
-            request = self.config.service.files().get_media(fileId=self.file_meta.get("id"))
+            request = self.session_handle.service.files().get_media(fileId=self.file_meta.get("id"))
         file = io.BytesIO()
         downloader = MediaIoBaseDownload(file, request)
         downloaded = False
@@ -134,7 +149,7 @@ class GoogleDriveIngestDoc(IngestDocCleanupMixin, BaseIngestDoc):
 
         saved = False
         if downloaded and file:
-            dir_ = self.file_meta.get("download_dir")
+            dir_ = Path(self.file_meta["download_dir"])
             if dir_:
                 if not dir_.is_dir():
                     logger.debug(f"Creating directory: {self.file_meta.get('download_dir')}")
@@ -170,12 +185,13 @@ class GoogleDriveConnector(ConnectorCleanupMixin, BaseConnector):
 
     def _list_objects(self, drive_id, recursive=False):
         files = []
+        service = self.config.create_session_handle().service
 
         def traverse(drive_id, download_dir, output_dir, recursive=False):
             page_token = None
             while True:
                 response = (
-                    self.config.service.files()
+                    service.files()
                     .list(
                         spaces="drive",
                         fields="nextPageToken, files(id, name, mimeType)",
@@ -221,10 +237,10 @@ class GoogleDriveConnector(ConnectorCleanupMixin, BaseConnector):
                             continue
 
                         name = FILE_FORMAT.format(name=meta.get("name"), id=meta.get("id"), ext=ext)
-                        meta["download_dir"] = download_dir
-                        meta["download_filepath"] = (download_dir / name).resolve()
-                        meta["output_dir"] = output_dir
-                        meta["output_filepath"] = (output_dir / name).resolve()
+                        meta["download_dir"] = str(download_dir)
+                        meta["download_filepath"] = (download_dir / name).resolve().as_posix()
+                        meta["output_dir"] = str(output_dir)
+                        meta["output_filepath"] = (output_dir / name).resolve().as_posix()
                         files.append(meta)
 
                 page_token = response.get("nextPageToken", None)
@@ -244,6 +260,4 @@ class GoogleDriveConnector(ConnectorCleanupMixin, BaseConnector):
 
     def get_ingest_docs(self):
         files = self._list_objects(self.config.drive_id, self.config.recursive)
-        # Setting to None because service object can't be pickled for multiprocessing.
-        self.config.service = None
         return [GoogleDriveIngestDoc(self.standard_config, self.config, file) for file in files]

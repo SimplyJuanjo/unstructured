@@ -2,7 +2,7 @@ import datetime as dt
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 
 from unstructured.ingest.interfaces import (
     BaseConnector,
@@ -27,7 +27,7 @@ class SimpleDiscordConfig(BaseConnectorConfig):
     # Discord Specific Options
     channels: List[str]
     token: str
-    days: int
+    days: Optional[int]
     verbose: bool = False
 
     def __post_init__(self):
@@ -55,8 +55,9 @@ class DiscordIngestDoc(IngestDocCleanupMixin, BaseIngestDoc):
 
     config: SimpleDiscordConfig
     channel: str
-    days: int
+    days: Optional[int]
     token: str
+    registry_name: str = "discord"
 
     # NOTE(crag): probably doesn't matter,  but intentionally not defining tmp_download_file
     # __post_init__ for multiprocessing simplicity (no Path objects in initially
@@ -107,6 +108,7 @@ class DiscordIngestDoc(IngestDocCleanupMixin, BaseIngestDoc):
 
         bot.run(self.token)
 
+        self._tmp_download_file().parent.mkdir(parents=True, exist_ok=True)
         with open(self._tmp_download_file(), "w") as f:
             for m in messages:
                 f.write(m.content + "\n")
@@ -130,8 +132,7 @@ class DiscordConnector(ConnectorCleanupMixin, BaseConnector):
         super().__init__(standard_config, config)
 
     def initialize(self):
-        """Verify that can get metadata for an object, validates connections info."""
-        os.mkdir(self.standard_config.download_dir)
+        pass
 
     def get_ingest_docs(self):
         return [

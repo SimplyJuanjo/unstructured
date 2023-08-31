@@ -11,15 +11,36 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 import requests
+from dataclasses_json import DataClassJsonMixin
 
 from unstructured.documents.elements import DataSourceMetadata
+from unstructured.ingest.error import PartitionError, SourceConnectionError
 from unstructured.ingest.logger import logger
 from unstructured.partition.auto import partition
 from unstructured.staging.base import convert_to_dict
 
 
 @dataclass
-class StandardConnectorConfig:
+class BaseSessionHandle(ABC):
+    """Abstract Base Class for sharing resources that are local to an individual process.
+    e.g., a connection for making a request for fetching documents."""
+
+
+@dataclass
+class ProcessorConfigs(DataClassJsonMixin):
+    """Common set of config required when running data connectors."""
+
+    partition_strategy: str
+    partition_ocr_languages: str
+    partition_pdf_infer_table_structure: bool
+    partition_encoding: str
+    num_processes: int
+    reprocess: bool
+    max_docs: int
+
+
+@dataclass
+class StandardConnectorConfig(DataClassJsonMixin):
     """Common set of config options passed to all connectors."""
 
     # where raw documents are stored for processing, and then removed if not preserve_downloads
@@ -38,12 +59,13 @@ class StandardConnectorConfig:
     re_download: bool = False
 
 
-class BaseConnectorConfig(ABC):
+@dataclass
+class BaseConnectorConfig(DataClassJsonMixin, ABC):
     """Abstract definition on which to define connector-specific attributes."""
 
 
 @dataclass
-class BaseConnector(ABC):
+class BaseConnector(DataClassJsonMixin, ABC):
     """Abstract Base Class for a connector to a remote source, e.g. S3 or Google Drive."""
 
     standard_config: StandardConnectorConfig
@@ -79,7 +101,7 @@ class BaseConnector(ABC):
 
 
 @dataclass
-class BaseIngestDoc(ABC):
+class BaseIngestDoc(DataClassJsonMixin, ABC):
     """An "ingest document" is specific to a connector, and provides
     methods to fetch a single raw document, store it locally for processing, any cleanup
     needed after successful processing of the doc, and the ability to write the doc's
@@ -170,6 +192,7 @@ class BaseIngestDoc(ABC):
     # NOTE(crag): Future BaseIngestDoc classes could define get_file_object() methods
     # in addition to or instead of get_file()
     @abstractmethod
+    @SourceConnectionError.wrap
     def get_file(self):
         """Fetches the "remote" doc and stores it locally on the filesystem."""
         pass
@@ -187,6 +210,7 @@ class BaseIngestDoc(ABC):
             json.dump(self.isd_elems_no_filename, output_f, ensure_ascii=False, indent=2)
         logger.info(f"Wrote {self._output_filename}")
 
+    @PartitionError.wrap
     def partition_file(self, **partition_kwargs) -> List[Dict[str, Any]]:
         if not self.standard_config.partition_by_api:
             logger.debug("Using local partition")
@@ -317,3 +341,26 @@ class IngestDocCleanupMixin:
         ):
             logger.debug(f"Cleaning up {self}")
             os.unlink(self.filename)
+
+
+class ConfigSessionHandleMixin:
+    @abstractmethod
+    def create_session_handle(self) -> BaseSessionHandle:
+        """Creates a session handle that will be assigned on each IngestDoc to share
+        session related resources across all document handling for a given subprocess."""
+
+
+class IngestDocSessionHandleMixin:
+    config: ConfigSessionHandleMixin
+    _session_handle: Optional[BaseSessionHandle] = None
+
+    @property
+    def session_handle(self):
+        """If a session handle is not assigned, creates a new one and assigns it."""
+        if self._session_handle is None:
+            self._session_handle = self.config.create_session_handle()
+        return self._session_handle
+
+    @session_handle.setter
+    def session_handle(self, session_handle: BaseSessionHandle):
+        self._session_handle = session_handle
