@@ -35,7 +35,7 @@ def process_data():
         file_path = FileHandler.download_file(params.url, suffix=suffix)
 
         # Extract the file
-        ocr_data = text_processor.load_file(file_path, strategy="ocr_only", ocr_languages="spa+eng", doc_id=params.doc_id)
+        ocr_data = text_processor.load_file(file_path, strategy="ocr_only", ocr_languages="spa+eng", doc_id=params.doc_id, suffix=suffix)
         print(f"OCR Data loaded in {time.time() - start_time} seconds")
 
         # Translate the file
@@ -79,7 +79,7 @@ def process_data():
             message["status"] = "index created, ocr"
             webpubsub_service.send_to_group(params.user_id, message)
 
-        fast_data = text_processor.load_file(file_path, strategy="fast", doc_id=params.doc_id)
+        fast_data = text_processor.load_file(file_path, strategy="fast", doc_id=params.doc_id, suffix=suffix)
         print(f"Fast Data loaded in {time.time() - start_time} seconds")
 
         # Translate the file fast
