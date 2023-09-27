@@ -6,10 +6,12 @@ import pytest
 from PIL import Image
 from unstructured_inference.inference import layout
 
+from unstructured.chunking.title import chunk_by_title
 from unstructured.documents.coordinates import PixelSpace
 from unstructured.documents.elements import (
     CoordinatesMetadata,
     ElementMetadata,
+    ListItem,
     NarrativeText,
     Text,
     Title,
@@ -121,7 +123,7 @@ def test_partition_pdf(
     file_mode,
     strategy,
     expected,
-    filename="example-docs/layout-parser-paper-fast.pdf",
+    filename="example-docs/layout-parser-paper-with-empty-pages.pdf",
 ):
     # Test that the partition_pdf function can handle filename
     def _test(result):
@@ -219,9 +221,17 @@ def test_partition_pdf_with_fast_strategy(
     elements = pdf.partition_pdf(filename=filename, url=None, strategy="fast")
     assert len(elements) > 10
     # check that the pdf has multiple different page numbers
-    assert {element.metadata.page_number for element in elements} == {1, 4}
+    assert {element.metadata.page_number for element in elements} == {1, 2}
     for element in elements:
         assert element.metadata.filename == "layout-parser-paper-fast.pdf"
+
+
+def test_partition_pdf_with_fast_neg_coordinates():
+    filename = "example-docs/negative-coords.pdf"
+    elements = pdf.partition_pdf(filename=filename, url=None, strategy="fast")
+    assert len(elements) == 5
+    assert elements[0].metadata.coordinates.points[0][0] < 0
+    assert elements[0].metadata.coordinates.points[1][0] < 0
 
 
 def test_partition_pdf_with_fast_groups_text(
@@ -383,6 +393,8 @@ def test_partition_pdf_with_copy_protection():
     )
     # check that the pdf has multiple different page numbers
     assert {element.metadata.page_number for element in elements} == {1, 2}
+    assert elements[0].metadata.detection_class_prob is not None
+    assert isinstance(elements[0].metadata.detection_class_prob, float)
 
 
 def test_partition_pdf_with_dpi():
@@ -798,3 +810,108 @@ def test_partition_pdf_with_ocr_has_coordinates_from_file(
         (1043.0, 2106.0),
         (1043.0, 2144.0),
     )
+
+
+@pytest.mark.parametrize(
+    ("filename"),
+    [
+        ("example-docs/multi-column-2p.pdf"),
+        ("example-docs/layout-parser-paper-fast.pdf"),
+        ("example-docs/list-item-example.pdf"),
+    ],
+)
+def test_partition_pdf_with_ocr_coordinates_are_not_nan_from_file(
+    filename,
+):
+    import math
+
+    with open(filename, "rb") as f:
+        elements = pdf.partition_pdf(
+            file=f,
+            strategy="ocr_only",
+        )
+    for element in elements:
+        if element.metadata.coordinates:
+            for point in element.metadata.coordinates.points:
+                if point[0] and point[1]:
+                    assert point[0] is not math.nan
+                    assert point[1] is not math.nan
+
+
+def test_add_chunking_strategy_on_partition_pdf(
+    filename="example-docs/layout-parser-paper-fast.pdf",
+):
+    elements = pdf.partition_pdf(filename=filename)
+    chunk_elements = pdf.partition_pdf(filename, chunking_strategy="by_title")
+    chunks = chunk_by_title(elements)
+    assert chunk_elements != elements
+    assert chunk_elements == chunks
+
+
+def test_partition_pdf_formats_languages_for_tesseract():
+    filename = "example-docs/DA-1p.pdf"
+    with mock.patch.object(layout, "process_file_with_model", mock.MagicMock()) as mock_process:
+        pdf.partition_pdf(filename=filename, strategy="hi_res", languages=["en"])
+        mock_process.assert_called_once_with(
+            filename,
+            is_image=False,
+            ocr_languages="eng",
+            ocr_mode="entire_page",
+            extract_tables=False,
+            model_name=None,
+        )
+
+
+def test_partition_pdf_warns_with_ocr_languages(caplog):
+    filename = "example-docs/chevron-page.pdf"
+    pdf.partition_pdf(filename=filename, strategy="hi_res", ocr_languages="eng")
+    assert "The ocr_languages kwarg will be deprecated" in caplog.text
+
+
+def test_partition_pdf_or_image_warns_with_ocr_languages(caplog):
+    filename = "example-docs/DA-1p.pdf"
+    pdf.partition_pdf_or_image(filename=filename, strategy="hi_res", ocr_languages="eng")
+    assert "The ocr_languages kwarg will be deprecated" in caplog.text
+
+
+def test_partition_categorization_backup():
+    text = "This is Clearly a Title."
+    with mock.patch.object(pdf, "_partition_pdf_or_image_local", return_value=[Text(text)]):
+        elements = pdf.partition_pdf_or_image(
+            "example-docs/layout-parser-paper-fast.pdf",
+            strategy="hi_res",
+        )
+        # Should have changed the element class from Text to Title
+        assert isinstance(elements[0], Title)
+        assert elements[0].text == text
+
+
+@pytest.mark.parametrize(
+    "filename",
+    ["example-docs/layout-parser-paper-fast.pdf"],
+)
+def test_combine_numbered_list(filename):
+    elements = pdf.partition_pdf(filename=filename, strategy="auto")
+    first_list_element = None
+    for element in elements:
+        if isinstance(element, ListItem):
+            first_list_element = element
+            break
+    assert len(elements) < 28
+    assert first_list_element.text.endswith("(Section 3)")
+
+
+def test_partition_pdf_uses_model_name():
+    with mock.patch.object(
+        pdf,
+        "_partition_pdf_or_image_local",
+    ) as mockpartition:
+        pdf.partition_pdf(
+            "example-docs/layout-parser-paper-fast.pdf",
+            model_name="test",
+            strategy="hi_res",
+        )
+
+        mockpartition.assert_called_once()
+        assert "model_name" in mockpartition.call_args.kwargs
+        assert mockpartition.call_args.kwargs["model_name"]
