@@ -35,7 +35,7 @@ def process_data():
         file_path = FileHandler.download_file(params.url, suffix=suffix)
 
         # Extract the file
-        ocr_data = text_processor.load_file(file_path, strategy="ocr_only", ocr_languages="spa+eng", doc_id=params.doc_id, suffix=suffix)
+        ocr_data = text_processor.load_file(file_path, strategy="hi_res", ocr_languages=["spa","eng"], doc_id=params.doc_id, suffix=suffix)
         print(f"OCR Data loaded in {time.time() - start_time} seconds")
 
         # Translate the file
@@ -79,41 +79,41 @@ def process_data():
             message["status"] = "index created, ocr"
             webpubsub_service.send_to_group(params.user_id, message)
 
-        fast_data = text_processor.load_file(file_path, strategy="fast", doc_id=params.doc_id, suffix=suffix)
-        print(f"Fast Data loaded in {time.time() - start_time} seconds")
+        # fast_data = text_processor.load_file(file_path, strategy="fast", doc_id=params.doc_id, suffix=suffix)
+        # print(f"Fast Data loaded in {time.time() - start_time} seconds")
 
-        # Translate the file fast
-        translate_time = time.time()
-        fast_translation, _ = translator.detect_and_translate(fast_data[0].page_content)
-        print(f"Fast translation done in {time.time() - translate_time} seconds")
+        # # Translate the file fast
+        # translate_time = time.time()
+        # fast_translation, _ = translator.detect_and_translate(fast_data[0].page_content)
+        # print(f"Fast translation done in {time.time() - translate_time} seconds")
         
-        # Store the file in Azure Blob Storage
-        azure_response = azure_blob_service.upload_text_to_blob("fast_extracted", fast_data[0].page_content)
-        print(f"Fast stored in Azure: {azure_response}")
-        message["status"] = "fast_extracted done"
-        webpubsub_service.send_to_group(params.user_id, message)
+        # # Store the file in Azure Blob Storage
+        # azure_response = azure_blob_service.upload_text_to_blob("fast_extracted", fast_data[0].page_content)
+        # print(f"Fast stored in Azure: {azure_response}")
+        # message["status"] = "fast_extracted done"
+        # webpubsub_service.send_to_group(params.user_id, message)
 
-        # Store the translation in Azure Blob Storage
-        azure_response = azure_blob_service.upload_text_to_blob("fast_extracted_translated", fast_translation)
-        print(f"Fast translation stored in Azure: {azure_response}")
-        message["status"] = "fast_extracted_translated done"
-        webpubsub_service.send_to_group(params.user_id, message)
+        # # Store the translation in Azure Blob Storage
+        # azure_response = azure_blob_service.upload_text_to_blob("fast_extracted_translated", fast_translation)
+        # print(f"Fast translation stored in Azure: {azure_response}")
+        # message["status"] = "fast_extracted_translated done"
+        # webpubsub_service.send_to_group(params.user_id, message)
 
-        # Process the translated data
-        fast_texts, fast_metadatas = text_processor.process_data(data=fast_data, chunk_size=1000, chunk_overlap=200, completed_translation=fast_translation)
+        # # Process the translated data
+        # fast_texts, fast_metadatas = text_processor.process_data(data=fast_data, chunk_size=1000, chunk_overlap=200, completed_translation=fast_translation)
 
-        # Index texts
-        try:
-            azure_time = time.time()
-            azure_cognitive_service.index_texts(fast_texts, fast_metadatas, azure_vectorstore)
-            print(f"Fast texts indexed in Azure Cognitive {azure_vectorstore} in {time.time() - azure_time} seconds")
-        except Exception as e:
-            message["status"] = "index creation failed"
-            webpubsub_service.send_to_group(params.user_id, message)
-            raise e
-        else:
-            message["status"] = "index created, let chat"
-            webpubsub_service.send_to_group(params.user_id, message)
+        # # Index texts
+        # try:
+        #     azure_time = time.time()
+        #     azure_cognitive_service.index_texts(fast_texts, fast_metadatas, azure_vectorstore)
+        #     print(f"Fast texts indexed in Azure Cognitive {azure_vectorstore} in {time.time() - azure_time} seconds")
+        # except Exception as e:
+        #     message["status"] = "index creation failed"
+        #     webpubsub_service.send_to_group(params.user_id, message)
+        #     raise e
+        # else:
+        #     message["status"] = "index created, let chat"
+        #     webpubsub_service.send_to_group(params.user_id, message)
 
         # Call the Node server
         node_server_caller.call_analize_doc(params.container_name, params.url_analize_doc, params.doc_id, params.filename, params.index_name, params.user_id)

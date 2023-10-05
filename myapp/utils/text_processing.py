@@ -1,6 +1,13 @@
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.document_loaders import UnstructuredFileLoader
 import subprocess
+import tiktoken
+
+def num_tokens_from_string(string: str,) -> int:
+    """Returns the number of tokens in a text string."""
+    encoding = tiktoken.encoding_for_model("gpt-4-0613")
+    num_tokens = len(encoding.encode(string))
+    return num_tokens
 
 def convert_docx_to_pdf(input_path, output_dir='/tmp'):
     subprocess.run([
@@ -12,11 +19,15 @@ def convert_docx_to_pdf(input_path, output_dir='/tmp'):
     ])
 
 class TextProcessor:
-    def load_file(self, temp_file_path, strategy="ocr_only", ocr_languages="spa+eng", doc_id=None, suffix=None):
-        if strategy == "ocr_only":
+    def load_file(self, temp_file_path, strategy="ocr_only", ocr_languages=["spa","eng"], doc_id=None, suffix=None):
+        if strategy == "hi_res":
             kwargs = {
                 "strategy": strategy,
-                "ocr_languages": ocr_languages,
+                "languages": ocr_languages,
+                # "chunking_strategy": "by_title",
+                # "combine_under_n_chars": 1000,
+                # "new_after_n_chars": 2000,
+
             }
         else:
             kwargs = {
@@ -28,9 +39,17 @@ class TextProcessor:
             convert_docx_to_pdf(temp_file_path)
             loader = UnstructuredFileLoader(temp_file_path.replace(".docx", ".pdf"), **kwargs)
         else:
-            loader = UnstructuredFileLoader(temp_file_path, **kwargs)
+            loader = UnstructuredFileLoader(temp_file_path, mode="single", **kwargs)
 
         data = loader.load()
+        # for doc in data:
+        #     print(num_tokens_from_string(doc.page_content), )
+        #     #print(doc.metadata)
+        #     print("----")
+        #     if num_tokens_from_string(doc.page_content) < 100:
+        #         print(doc.page_content)
+            
+            #doc.metadata["doc_id"] = doc_id
         data[0].metadata["doc_id"] = doc_id
         return data
 

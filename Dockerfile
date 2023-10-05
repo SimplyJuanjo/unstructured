@@ -55,8 +55,8 @@ RUN python3.10 -m pip install pip==${PIP_VERSION} && \
   pip install --no-cache -r requirements/extra-pptx.txt && \
   pip install --no-cache -r requirements/extra-xlsx.txt && \
   pip install --no-cache Flask==2.2.3 && \
-  pip install --no-cache langchain==0.0.268 && \
-  pip install --no-cache langchain_experimental==0.0.5 && \
+  pip install --no-cache langchain==0.0.303 && \
+  pip install --no-cache langchain_experimental==0.0.22 && \
   pip install --no-cache pdfminer.six && \
   pip install --no-cache requests && \
   pip install --no-cache openai && \
@@ -64,7 +64,7 @@ RUN python3.10 -m pip install pip==${PIP_VERSION} && \
   pip install --no-cache azure-storage-blob azure-identity && \
   pip install --no-cache azure-messaging-webpubsubservice && \
   pip install --no-cache deepl && \
-  pip install --no-cache azure-search-documents==11.4.0b6 && \
+  pip install --no-cache azure-search-documents==11.4.0b9 && \
   dnf -y groupremove "Development Tools" && \
   dnf clean all
 

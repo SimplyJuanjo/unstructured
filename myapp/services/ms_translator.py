@@ -16,7 +16,7 @@ class MS_Translator:
     def detect_language(self, text):
         path = '/detect?api-version=3.0'
         constructed_url = self.base_url + path
-        detect_body = [{'text': text}]
+        detect_body = [{'text': text[0:10000]}]
         response = requests.post(constructed_url, headers=self.headers, json=detect_body)
         language = response.json()[0]['language']
         return language
