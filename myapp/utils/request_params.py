@@ -21,3 +21,11 @@ class ProcessDataParams:
             filename=request.args.get('filename'),
             url_analize_doc = request.args.get('urlanalizeDoc')
         )
+    
+    @classmethod
+    def from_request_lite(cls, request):
+        return cls(
+            doc_id=request.args.get('doc_id'),
+            url=request.args.get('url'),
+            filename=request.args.get('filename'),
+        )

@@ -131,3 +131,29 @@ def process_data():
         message2["error"] = str(e)
         webpubsub_service.send_to_group(params.user_id, message2)
         raise e
+    
+"""
+This endpoint will be called from the Nav29Lite app. It is a simplified version of the process_data function.
+This version will only extract the text from the file and return it to the app.
+"""
+@main.route('/triggerExtractLite', methods=['POST'])
+def process_data_lite():
+    try:
+        start_time = time.time()
+        params = ProcessDataParams.from_request_lite(request)
+        text_processor = TextProcessor()
+
+        # Download the file
+        print(params.filename)
+        suffix = "."+params.filename.split(".")[-1] if params.filename.split(".")[-1] != "pdf" else ".pdf"
+        file_path = FileHandler.download_file(params.url, suffix=suffix)
+
+        # Extract the file
+        ocr_data = text_processor.load_file(file_path, strategy="fast", ocr_languages=["spa","eng"], doc_id=params.doc_id, suffix=suffix)
+        print(f"OCR Data loaded in {time.time() - start_time} seconds")
+
+        return jsonify({"msg": "done", "data": ocr_data[0].page_content, "doc_id": params.doc_id, "status": 200})
+
+    except Exception as e:
+        print(e)
+        raise e
