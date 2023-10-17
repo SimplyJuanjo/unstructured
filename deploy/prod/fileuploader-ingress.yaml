@@ -22,3 +22,10 @@ spec:
             name: fileuploader-service
             port:
               number: 80
+      - path: /triggerExtractLite
+        pathType: Prefix 
+        backend:
+          service:
+            name: fileuploader-service
+            port:
+              number: 80
