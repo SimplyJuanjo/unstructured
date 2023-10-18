@@ -5,7 +5,7 @@ from myapp.services.webpubsub import WebPubSubClientWrapper
 from myapp.utils.translation import Translator
 from myapp.utils.text_processing import TextProcessor
 from myapp.utils.file_handling import FileHandler
-from myapp.utils.request_params import ProcessDataParams
+from myapp.utils.request_params import ProcessDataParams, ProcessDataParamsLite
 from myapp.utils.node_server_caller import NodeServerCaller
 import time
 
@@ -140,7 +140,7 @@ This version will only extract the text from the file and return it to the app.
 def process_data_lite():
     try:
         start_time = time.time()
-        params = ProcessDataParams.from_request_lite(request)
+        params = ProcessDataParamsLite.from_request(request)
         text_processor = TextProcessor()
 
         # Download the file
@@ -149,7 +149,7 @@ def process_data_lite():
         file_path = FileHandler.download_file(params.url, suffix=suffix)
 
         # Extract the file
-        ocr_data = text_processor.load_file(file_path, strategy="fast", ocr_languages=["spa","eng"], doc_id=params.doc_id, suffix=suffix)
+        ocr_data = text_processor.load_file(file_path, strategy="hi_res", ocr_languages=["spa","eng"], doc_id=params.doc_id, suffix=suffix)
         print(f"OCR Data loaded in {time.time() - start_time} seconds")
 
         return jsonify({"msg": "done", "data": ocr_data[0].page_content, "doc_id": params.doc_id, "status": 200})

@@ -22,10 +22,20 @@ class ProcessDataParams:
             url_analize_doc = request.args.get('urlanalizeDoc')
         )
     
+@dataclass
+class ProcessDataParamsLite:
+    doc_id: str
+    url: str
+    url_analize_doc: str
+    container_name: str
+    filename: str
+
     @classmethod
-    def from_request_lite(cls, request):
+    def from_request(cls, request):
         return cls(
             doc_id=request.args.get('doc_id'),
             url=request.args.get('url'),
+            container_name=request.args.get('containerName'),
             filename=request.args.get('filename'),
+            url_analize_doc = request.args.get('urlanalizeDoc')
         )

@@ -54,7 +54,7 @@ RUN python3.10 -m pip install pip==${PIP_VERSION} && \
   pip install --no-cache -r requirements/extra-pdf-image.txt && \
   pip install --no-cache -r requirements/extra-pptx.txt && \
   pip install --no-cache -r requirements/extra-xlsx.txt && \
-  pip install --no-cache Flask==2.2.3 && \
+  pip install --no-cache Flask==3.0.0 && \
   pip install --no-cache langchain==0.0.303 && \
   pip install --no-cache langchain_experimental==0.0.22 && \
   pip install --no-cache pdfminer.six && \
