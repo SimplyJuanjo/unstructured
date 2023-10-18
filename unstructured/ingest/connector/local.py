@@ -62,7 +62,7 @@ class LocalIngestDoc(BaseIngestDoc):
             if input_path.is_file()
             else f"{Path(self.path).relative_to(input_path)}.json"
         )
-        return Path(self.partition_config.output_dir) / basename
+        return Path(self.processor_config.output_dir) / basename
 
 
 @dataclass
@@ -70,7 +70,9 @@ class LocalSourceConnector(BaseSourceConnector):
     """Objects of this class support fetching document(s) from local file system"""
 
     connector_config: SimpleLocalConfig
-    ingest_doc_cls: t.Type[LocalIngestDoc] = LocalIngestDoc
+
+    def __post_init__(self):
+        self.ingest_doc_cls: t.Type[LocalIngestDoc] = LocalIngestDoc
 
     def cleanup(self, cur_dir=None):
         """Not applicable to local file system"""
@@ -105,7 +107,7 @@ class LocalSourceConnector(BaseSourceConnector):
         return [
             self.ingest_doc_cls(
                 connector_config=self.connector_config,
-                partition_config=self.partition_config,
+                processor_config=self.processor_config,
                 read_config=self.read_config,
                 path=file,
             )
