@@ -21,25 +21,32 @@ def convert_docx_to_pdf(input_path, output_dir='/tmp'):
 class TextProcessor:
     def load_file(self, temp_file_path, strategy="ocr_only", ocr_languages=["spa","eng"], doc_id=None, suffix=None):
         if strategy == "hi_res":
-            kwargs = {
+            unstructured_kwargs = {
                 "strategy": strategy,
                 "languages": ocr_languages,
+                "include_page_breaks": True,
+                # "infer_table_structure": True,
                 # "chunking_strategy": "by_title",
                 # "combine_under_n_chars": 1000,
                 # "new_after_n_chars": 2000,
 
             }
+        elif strategy == "ocr_only":
+            unstructured_kwargs = {
+                "strategy": strategy,
+                "languages": ocr_languages,
+            }
         else:
-            kwargs = {
+            unstructured_kwargs = {
                 "strategy": strategy,
             }
 
         if suffix==".docx":
             #Convert to pdf
             convert_docx_to_pdf(temp_file_path)
-            loader = UnstructuredFileLoader(temp_file_path.replace(".docx", ".pdf"), **kwargs)
+            loader = UnstructuredFileLoader(temp_file_path.replace(".docx", ".pdf"), **unstructured_kwargs)
         else:
-            loader = UnstructuredFileLoader(temp_file_path, mode="single", **kwargs)
+            loader = UnstructuredFileLoader(temp_file_path, mode="single", **unstructured_kwargs)
 
         data = loader.load()
         # for doc in data:

@@ -35,7 +35,7 @@ def process_data():
         file_path = FileHandler.download_file(params.url, suffix=suffix)
 
         # Extract the file
-        ocr_data = text_processor.load_file(file_path, strategy="hi_res", ocr_languages=["spa","eng"], doc_id=params.doc_id, suffix=suffix)
+        ocr_data = text_processor.load_file(file_path, strategy="ocr_only", ocr_languages=["spa","eng"], doc_id=params.doc_id, suffix=suffix)
         print(f"OCR Data loaded in {time.time() - start_time} seconds")
 
         # Translate the file
@@ -59,25 +59,25 @@ def process_data():
         message["status"] = "extracted_translated done"
         webpubsub_service.send_to_group(params.user_id, message)
 
-        # Process the translated data
-        texts, metadatas = text_processor.process_data(data=ocr_data, chunk_size=1400, chunk_overlap=400, completed_translation=ocr_translation)
+        # # Process the translated data
+        # texts, metadatas = text_processor.process_data(data=ocr_data, chunk_size=1400, chunk_overlap=400, completed_translation=ocr_translation)
 
-        # Create an index if it doesn't exist
-        azure_vectorstore = azure_cognitive_service.create_index_if_none(params.index_name)
+        # # Create an index if it doesn't exist
+        # azure_vectorstore = azure_cognitive_service.create_index_if_none(params.index_name)
 
-        # Index texts
-        try:
-            azure_time = time.time()
-            azure_cognitive_service.index_texts(texts, metadatas, azure_vectorstore)
-            print(f"Texts indexed in Azure Cognitive {azure_vectorstore} in {time.time() - azure_time} seconds")
-        except Exception as e:
-            message["status"] = "index creation failed"
-            webpubsub_service.send_to_group(params.user_id, message)
-            raise e
+        # # Index texts
+        # try:
+        #     azure_time = time.time()
+        #     azure_cognitive_service.index_texts(texts, metadatas, azure_vectorstore)
+        #     print(f"Texts indexed in Azure Cognitive {azure_vectorstore} in {time.time() - azure_time} seconds")
+        # except Exception as e:
+        #     message["status"] = "index creation failed"
+        #     webpubsub_service.send_to_group(params.user_id, message)
+        #     raise e
         
-        else:
-            message["status"] = "index created, ocr"
-            webpubsub_service.send_to_group(params.user_id, message)
+        # else:
+        message["status"] = "index created, ocr"
+        webpubsub_service.send_to_group(params.user_id, message)
 
         # fast_data = text_processor.load_file(file_path, strategy="fast", doc_id=params.doc_id, suffix=suffix)
         # print(f"Fast Data loaded in {time.time() - start_time} seconds")
@@ -149,7 +149,7 @@ def process_data_lite():
         file_path = FileHandler.download_file(params.url, suffix=suffix)
 
         # Extract the file
-        ocr_data = text_processor.load_file(file_path, strategy="hi_res", ocr_languages=["spa","eng"], doc_id=params.doc_id, suffix=suffix)
+        ocr_data = text_processor.load_file(file_path, strategy="ocr_only", ocr_languages=["spa","eng"], doc_id=params.doc_id, suffix=suffix)
         print(f"OCR Data loaded in {time.time() - start_time} seconds")
 
         return jsonify({"msg": "done", "data": ocr_data[0].page_content, "doc_id": params.doc_id, "status": 200})
