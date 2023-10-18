@@ -29,29 +29,24 @@ Run Locally
 
       .. code:: python
 
-        import subprocess
+        import os
 
-        command = [
-          "unstructured-ingest",
-          "airtable",
-          "--metadata-exclude", "filename,file_directory,metadata.data_source.date_processed",
-          "--personal-access-token", "$AIRTABLE_PERSONAL_ACCESS_TOKEN",
-          "--output-dir", "airtable-ingest-output"
-          "--num-processes", "2",
-          "--reprocess",
-        ]
+        from unstructured.ingest.interfaces import PartitionConfig, ReadConfig, ProcessorConfig
+        from unstructured.ingest.runner import AirtableRunner
 
-        # Run the command
-        process = subprocess.Popen(command, stdout=subprocess.PIPE)
-        output, error = process.communicate()
-
-        # Print output
-        if process.returncode == 0:
-            print('Command executed successfully. Output:')
-            print(output.decode())
-        else:
-            print('Command failed. Error:')
-            print(error.decode())
+        if __name__ == "__main__":
+            runner = AirtableRunner(
+                processor_config=ProcessorConfig(
+                    verbose=True,
+                    output_dir="airtable-ingest-output",
+                    num_processes=2,
+                ),
+                read_config=ReadConfig(),
+                partition_config=PartitionConfig()
+            )
+            runner.run(
+                personal_access_token=os.getenv("AIRTABLE_PERSONAL_ACCESS_TOKEN")
+            )
 
 Run via the API
 ---------------
@@ -78,31 +73,27 @@ You can also use upstream connectors with the ``unstructured`` API. For this you
 
       .. code:: python
 
-        import subprocess
+        import os
 
-        command = [
-          "unstructured-ingest",
-          "airtable",
-          "--metadata-exclude", "filename,file_directory,metadata.data_source.date_processed",
-          "--personal-access-token", "$AIRTABLE_PERSONAL_ACCESS_TOKEN",
-          "--output-dir", "airtable-ingest-output"
-          "--num-processes", "2",
-          "--reprocess",
-          "--partition-by-api",
-          "--api-key", "<UNSTRUCTURED-API-KEY>",
-        ]
+        from unstructured.ingest.interfaces import PartitionConfig, ProcessorConfig, ReadConfig
+        from unstructured.ingest.runner import AirtableRunner
 
-        # Run the command
-        process = subprocess.Popen(command, stdout=subprocess.PIPE)
-        output, error = process.communicate()
-
-        # Print output
-        if process.returncode == 0:
-            print('Command executed successfully. Output:')
-            print(output.decode())
-        else:
-            print('Command failed. Error:')
-            print(error.decode())
+        if __name__ == "__main__":
+            runner = AirtableRunner(
+                processor_config=ProcessorConfig(
+                    verbose=True,
+                    output_dir="airtable-ingest-output",
+                    num_processes=2,
+                ),
+                read_config=ReadConfig(),
+                partition_config=PartitionConfig(
+                    partition_by_api=True,
+                    api_key=os.getenv("UNSTRUCTURED_API_KEY"),
+                ),
+            )
+            runner.run(
+                personal_access_token=os.getenv("AIRTABLE_PERSONAL_ACCESS_TOKEN"),
+            )
 
 Additionally, you will need to pass the ``--partition-endpoint`` if you're running the API locally. You can find more information about the ``unstructured`` API `here <https://github.com/Unstructured-IO/unstructured-api>`_.
 
