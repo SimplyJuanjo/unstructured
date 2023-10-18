@@ -76,8 +76,8 @@ def process_data():
         #     raise e
         
         # else:
-        message["status"] = "index created, ocr"
-        webpubsub_service.send_to_group(params.user_id, message)
+        # message["status"] = "index created, ocr"
+        # webpubsub_service.send_to_group(params.user_id, message)
 
         # fast_data = text_processor.load_file(file_path, strategy="fast", doc_id=params.doc_id, suffix=suffix)
         # print(f"Fast Data loaded in {time.time() - start_time} seconds")
